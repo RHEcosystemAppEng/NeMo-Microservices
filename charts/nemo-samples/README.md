@@ -120,19 +120,18 @@ oc create secret generic wandb-secret \
 
 ### 3. Required ConfigMaps (For NemoCustomizer)
 
+**IMPORTANT**: The `nemo-training-config` ConfigMap is **automatically created** by the Helm chart with the correct configuration.
+
+**Manual ConfigMap (Required):**
 ```bash
-# Model configuration ConfigMap
+# Model configuration ConfigMap (must be created manually)
+# See quickstart Step 3 (lines 1257-1332) for the complete configuration
 oc create configmap nemo-model-config \
   --from-file=<model-config-file> \
   -n <namespace>
-
-# Training configuration ConfigMap (optional)
-oc create configmap nemo-training-config \
-  --from-file=<training-config-file> \
-  -n <namespace>
 ```
 
-**Note**: See quickstart documentation for detailed ConfigMap contents.
+**Note**: The `nemo-training-config` ConfigMap is created automatically by the chart with the correct YAML structure. You do NOT need to create it manually.
 
 ## Quick Start
 

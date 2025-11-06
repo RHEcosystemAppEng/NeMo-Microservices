@@ -48,7 +48,7 @@ customizer:
     name: finetuning-ms-models-pvc
     size: 50Gi
   workspacePVC:
-    storageClass: "local-path"
+    storageClass: "gp3-csi"  # Changed from "local-path" to match cluster storage class
     size: 10Gi
     mountPath: /pvc/workspace
   modelConfig:
@@ -61,6 +61,10 @@ customizer:
   tolerations:
     - key: "nvidia.com/gpu"
       operator: "Exists"
+      effect: "NoSchedule"
+    - key: "g5-gpu"
+      operator: "Equal"
+      value: "true"
       effect: "NoSchedule"
 
 # ===== NemoDatastore Configuration =====
@@ -187,6 +191,10 @@ nimCache:
   tensorParallelism: "1"
   pullSecret: ngc-secret
   authSecret: ngc-api-secret
+  # OpenShift-compatible UIDs (required for nonroot SCC)
+  # Range: 1000790000-1000799999
+  userID: 1000790000
+  groupID: 1000790000
   pvc:
     create: true
     size: "50Gi"

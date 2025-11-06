@@ -5,6 +5,10 @@ metadata:
   name: {{ .Values.nimCache.name }}
   namespace: {{ .Values.namespace.name }}
 spec:
+  # OpenShift-compatible UIDs (required for nonroot SCC)
+  # Range: 1000790000-1000799999
+  userID: {{ .Values.nimCache.userID | default 1000790000 }}
+  groupID: {{ .Values.nimCache.groupID | default 1000790000 }}
   # GPU node tolerations for OpenShift/Kubernetes clusters with tainted GPU nodes
   tolerations:
 {{- toYaml .Values.nimCache.tolerations | nindent 4 }}

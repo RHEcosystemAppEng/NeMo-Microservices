@@ -46,7 +46,7 @@ spec:
     endpoint: http://{{ .Values.datastore.name }}.{{ .Values.namespace.name }}.svc.cluster.local:8000
   # URL for MLflow tracking server
   mlflow: 
-    endpoint: http://mlflow-tracking.{{ .Values.namespace.name }}.svc.cluster.local:80
+    endpoint: http://nemo-infra-customizer-mlflow-tracking.{{ .Values.namespace.name }}.svc.cluster.local:80
   # Configuration for the data store CLI tools
   nemoDatastoreTools:
     image: {{ .Values.customizer.datastoreToolsImage.repository }}:{{ .Values.customizer.datastoreToolsImage.tag }}
