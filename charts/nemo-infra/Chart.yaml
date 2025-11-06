@@ -1,0 +1,95 @@
+apiVersion: v2
+name: nemo-infra
+description: NVIDIA NeMo Infrastructure Components Helm Chart for OpenShift
+type: application
+version: 1.0.0
+appVersion: "25.06"
+keywords:
+  - nvidia
+  - nemo
+  - mlops
+  - openshift
+maintainers:
+  - name: NeMo Infrastructure Team
+
+dependencies:
+  # Datastore PostgreSQL
+  - name: postgresql
+    version: "16.0.0"
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: install.datastore
+    alias: datastore-postgresql
+  # Entity Store PostgreSQL
+  - name: postgresql
+    version: "16.0.0"
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: install.entityStore
+    alias: entity-store-postgresql
+  # Customizer PostgreSQL
+  - name: postgresql
+    version: "16.0.0"
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: install.customizer
+    alias: customizer-postgresql
+  # Guardrail PostgreSQL
+  - name: postgresql
+    version: "16.0.0"
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: install.guardrail
+    alias: guardrail-postgresql
+  # Evaluator PostgreSQL
+  - name: postgresql
+    version: "16.0.0"
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: install.evaluator
+    alias: evaluator-postgresql
+  # Customizer MLflow
+  - name: mlflow
+    version: "1.0.6"
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: install.customizer
+    alias: customizer-mlflow
+  # Customizer OpenTelemetry
+  - name: opentelemetry-collector
+    version: "0.93.3"
+    repository: https://open-telemetry.github.io/opentelemetry-helm-charts
+    condition: install.customizer
+    alias: customizer-opentelemetry
+  # Evaluator OpenTelemetry
+  - name: opentelemetry-collector
+    version: "0.93.3"
+    repository: https://open-telemetry.github.io/opentelemetry-helm-charts
+    condition: install.evaluator
+    alias: evaluator-opentelemetry
+  # Evaluator Argo Workflows
+  - name: argo-workflows
+    version: "0.40.11"
+    repository: https://argoproj.github.io/argo-helm
+    condition: install.evaluator
+    alias: evaluator-argo
+  # Evaluator Milvus
+  - name: milvus
+    version: "4.1.11"
+    repository: https://zilliztech.github.io/milvus-helm/
+    condition: install.evaluator
+    alias: evaluator-milvus
+  # Volcano Scheduler
+  - name: volcano
+    version: "1.9.0"
+    repository: https://volcano-sh.github.io/helm-charts
+    condition: install.volcano
+    alias: volcano
+  # NeMo Operator
+  - name: nemo-operator
+    version: "25.06"
+    repository: https://helm.ngc.nvidia.com/nvidia-nemo
+    condition: install.nemoOperator
+    alias: nemo-operator
+  # NIM Operator (local chart - OpenShift-specific)
+  # Note: Chart must be packaged and placed in charts/ directory
+  # Run: cd ../../../deploy-on-openshift/deployments/helm/k8s-nim-operator && helm package . --destination ../../../../NeMo-Microservices/charts/nemo-infra/charts
+  - name: k8s-nim-operator
+    version: "3.0.0"
+    repository: file://charts
+    condition: install.nimOperator
+    alias: nim-operator

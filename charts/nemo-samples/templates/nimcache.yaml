@@ -1,0 +1,26 @@
+{{- if .Values.nimCache.enabled }}
+apiVersion: apps.nvidia.com/v1alpha1
+kind: NIMCache
+metadata:
+  name: {{ .Values.nimCache.name }}
+  namespace: {{ .Values.namespace.name }}
+spec:
+  # GPU node tolerations for OpenShift/Kubernetes clusters with tainted GPU nodes
+  tolerations:
+{{- toYaml .Values.nimCache.tolerations | nindent 4 }}
+  source:
+    ngc:
+      modelPuller: {{ .Values.nimCache.modelPuller | quote }}
+      pullSecret: {{ .Values.nimCache.pullSecret }}
+      authSecret: {{ .Values.nimCache.authSecret }}
+      model:
+        engine: {{ .Values.nimCache.engine }}
+        tensorParallelism: {{ .Values.nimCache.tensorParallelism | quote }}
+  storage:
+    pvc:
+      create: {{ .Values.nimCache.pvc.create }}
+      storageClass: {{ .Values.storage.storageClass | quote }}
+      size: {{ .Values.nimCache.pvc.size | quote }}
+      volumeAccessMode: {{ .Values.storage.volumeAccessMode }}
+{{- end }}
+

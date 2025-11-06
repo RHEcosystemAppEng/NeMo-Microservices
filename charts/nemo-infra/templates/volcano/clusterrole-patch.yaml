@@ -1,0 +1,78 @@
+{{- if .Values.install.volcano }}
+# Note: This ClusterRole patch will be applied via a Job hook
+# The volcano-controllers ClusterRole is created by the volcano chart
+# and we need to add permissions for replicasets/finalizers
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: volcano-clusterrole-patch
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      serviceAccountName: volcano-rbac-setup
+      restartPolicy: OnFailure
+      containers:
+      - name: kubectl
+        image: registry.redhat.io/openshift4/ose-cli:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          kubectl patch clusterrole volcano-controllers --type='json' -p='[
+            {
+              "op": "add",
+              "path": "/rules/-",
+              "value": {
+                "apiGroups": ["apps"],
+                "resources": ["replicasets/finalizers"],
+                "verbs": ["update", "patch"]
+              }
+            }
+          ]' || echo "ClusterRole already patched or not found"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: volcano-rbac-setup
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: volcano-rbac-setup
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+rules:
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["clusterroles"]
+  verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: volcano-rbac-setup
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+subjects:
+- kind: ServiceAccount
+  name: volcano-rbac-setup
+  namespace: {{ .Values.namespace.name }}
+roleRef:
+  kind: ClusterRole
+  name: volcano-rbac-setup
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+

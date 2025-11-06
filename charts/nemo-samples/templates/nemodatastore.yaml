@@ -1,0 +1,42 @@
+{{- if .Values.datastore.enabled }}
+apiVersion: apps.nvidia.com/v1alpha1
+kind: NemoDatastore
+metadata:
+  name: {{ .Values.datastore.name }}
+  namespace: {{ .Values.namespace.name }}
+spec:
+  secrets:
+    datastoreConfigSecret: {{ .Values.datastore.secrets.datastoreConfigSecret | quote }}
+    datastoreInitSecret: {{ .Values.datastore.secrets.datastoreInitSecret | quote }}
+    datastoreInlineConfigSecret: {{ .Values.datastore.secrets.datastoreInlineConfigSecret | quote }}
+    giteaAdminSecret: {{ .Values.datastore.secrets.giteaAdminSecret | quote }}
+    lfsJwtSecret: {{ .Values.datastore.secrets.lfsJwtSecret | quote }}
+  databaseConfig:
+    credentials:
+      user: {{ .Values.datastore.database.user }}
+      secretName: {{ .Values.datastore.database.secretName }}
+      passwordKey: {{ .Values.datastore.database.passwordKey }}
+    host: nemo-infra-datastore-postgresql.{{ .Values.namespace.name }}.svc.cluster.local
+    port: {{ .Values.datastore.database.port }}
+    databaseName: {{ .Values.datastore.database.databaseName }}
+  pvc:
+    name: {{ .Values.datastore.pvc.name | quote }}
+    create: {{ .Values.datastore.pvc.create }}
+    storageClass: {{ .Values.storage.storageClass | quote }}
+    volumeAccessMode: {{ .Values.storage.volumeAccessMode }}
+    size: {{ .Values.datastore.pvc.size | quote }}
+  expose:
+    service:
+      type: ClusterIP
+      port: 8000
+  image:
+    repository: {{ .Values.datastore.image.repository }}
+    tag: {{ .Values.datastore.image.tag | quote }}
+    pullPolicy: {{ .Values.datastore.image.pullPolicy }}
+    pullSecrets:
+      - ngc-secret
+  replicas: {{ .Values.datastore.replicas }}
+  resources:
+{{- toYaml .Values.datastore.resources | nindent 4 }}
+{{- end }}
+

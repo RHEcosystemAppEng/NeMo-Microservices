@@ -1,0 +1,76 @@
+{{- if .Values.install.volcano }}
+# Grant privileged SCC to volcano-scheduler service account
+# Following the quickstart guide: oc adm policy add-scc-to-user privileged system:serviceaccount:$NEMO_NAMESPACE:volcano-scheduler
+# This is done via a Job hook since oc adm policy requires cluster-admin privileges
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: volcano-scc-setup
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      serviceAccountName: volcano-scc-setup
+      restartPolicy: OnFailure
+      containers:
+      - name: oc
+        image: registry.redhat.io/openshift4/ose-cli:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          # Grant privileged SCC to volcano scheduler service account
+          # The service account name is prefixed with the Helm release name
+          RELEASE_NAME="{{ .Release.Name }}"
+          oc adm policy add-scc-to-user privileged system:serviceaccount:{{ .Values.namespace.name }}:${RELEASE_NAME}-scheduler || echo "SCC already granted or not OpenShift"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: volcano-scc-setup
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+---
+# Alternative: Use RBAC Role/Binding approach (if oc adm policy doesn't work)
+# This matches the Ansible approach using hostmount-anyuid SCC
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: volcano-scc-privileged
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+rules:
+- apiGroups: ['security.openshift.io']
+  resources: ['securitycontextconstraints']
+  verbs: ['use']
+  resourceNames: ['privileged']
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: volcano-scc-privileged-binding
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+subjects:
+- kind: ServiceAccount
+  name: {{ .Release.Name }}-scheduler
+  namespace: {{ .Values.namespace.name }}
+roleRef:
+  kind: Role
+  name: volcano-scc-privileged
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+

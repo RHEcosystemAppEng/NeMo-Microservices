@@ -1,0 +1,227 @@
+# NeMo Samples Helm Chart Values
+# Following quickstart Step 6 (lines 152-164)
+# Deploys 7 custom resources: NemoCustomizer, NemoDatastore, NemoEntitystore,
+# NemoEvaluator, NemoGuardrail, NIMCache, NIMPipeline
+
+# Installation namespace
+namespace:
+  name: arhkp-nemo-helm
+
+# Storage configuration
+storage:
+  storageClass: ""  # Empty string uses default storage class
+  volumeAccessMode: ReadWriteOnce
+
+# ===== NemoCustomizer Configuration =====
+# Image: nvcr.io/nvidia/nemo-microservices/customizer-api:25.08 (exact from quickstart)
+customizer:
+  enabled: true
+  name: nemocustomizer-sample
+  image:
+    repository: nvcr.io/nvidia/nemo-microservices/customizer-api
+    tag: "25.08"
+    pullPolicy: IfNotPresent
+  trainingImage:
+    repository: nvcr.io/nvidia/nemo-microservices/customizer
+    tag: "25.08"
+  datastoreToolsImage:
+    repository: nvcr.io/nvidia/nemo-microservices/nds-v2-huggingface-cli
+    tag: "25.08"
+  scheduler:
+    type: "volcano"
+  wandb:
+    secretName: wandb-secret
+    apiKeyKey: apiKey
+    encryptionKey: encryptionKey
+  otel:
+    enabled: true
+    # exporterOtlpEndpoint will be templated in the template file
+  database:
+    # host will be templated in the template file
+    port: 5432
+    databaseName: ncsdb
+    user: ncsuser
+    secretName: customizer-pg-existing-secret
+    passwordKey: password
+  modelPVC:
+    create: true
+    name: finetuning-ms-models-pvc
+    size: 50Gi
+  workspacePVC:
+    storageClass: "local-path"
+    size: 10Gi
+    mountPath: /pvc/workspace
+  modelConfig:
+    name: nemo-model-config
+  trainingConfig:
+    name: nemo-training-config
+  ngcAPISecret:
+    name: ngc-api-secret
+    key: "NGC_API_KEY"
+  tolerations:
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+# ===== NemoDatastore Configuration =====
+# Image: nvcr.io/nvidia/nemo-microservices/datastore:25.08 (exact from quickstart)
+datastore:
+  enabled: true
+  name: nemodatastore-sample
+  image:
+    repository: nvcr.io/nvidia/nemo-microservices/datastore
+    tag: "25.08"
+    pullPolicy: IfNotPresent
+  database:
+    # host will be templated in the template file
+    port: 5432
+    databaseName: ndsdb
+    user: ndsuser
+    secretName: datastore-pg-existing-secret
+    passwordKey: password
+  pvc:
+    name: "pvc-shared-data"
+    create: true
+    size: "10Gi"
+  replicas: 1
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "500m"
+    limits:
+      memory: "512Mi"
+      cpu: "1"
+  secrets:
+    datastoreConfigSecret: "nemo-ms-nemo-datastore"
+    datastoreInitSecret: "nemo-ms-nemo-datastore-init"
+    datastoreInlineConfigSecret: "nemo-ms-nemo-datastore-inline-config"
+    giteaAdminSecret: "gitea-admin-credentials"
+    lfsJwtSecret: "nemo-ms-nemo-datastore--lfs-jwt"
+
+# ===== NemoEntitystore Configuration =====
+# Image: nvcr.io/nvidia/nemo-microservices/entity-store:25.08 (exact from quickstart)
+entitystore:
+  enabled: true
+  name: nemoentitystore-sample
+  image:
+    repository: nvcr.io/nvidia/nemo-microservices/entity-store
+    tag: "25.08"
+    pullPolicy: IfNotPresent
+  database:
+    # host will be templated in the template file
+    port: 5432
+    databaseName: nesdb
+    user: nesuser
+    secretName: entity-store-pg-existing-secret
+    passwordKey: password
+
+# ===== NemoEvaluator Configuration =====
+# Image: nvcr.io/nvidia/nemo-microservices/evaluator:25.06 (exact from quickstart)
+evaluator:
+  enabled: true
+  name: nemoevaluator-sample
+  image:
+    repository: nvcr.io/nvidia/nemo-microservices/evaluator
+    tag: "25.06"
+    pullPolicy: IfNotPresent
+  evaluationImages:
+    bigcodeEvalHarness: "nvcr.io/nvidia/nemo-microservices/eval-tool-benchmark-bigcode:0.12.21"
+    lmEvalHarness: "nvcr.io/nvidia/nemo-microservices/eval-tool-benchmark-lm-eval-harness:0.12.21"
+    similarityMetrics: "nvcr.io/nvidia/nemo-microservices/eval-tool-benchmark-custom-eval:0.12.21"
+    llmAsJudge: "nvcr.io/nvidia/nemo-microservices/eval-tool-benchmark-llm-as-a-judge:0.12.21"
+    mtBench: "nvcr.io/nvidia/nemo-microservices/eval-tool-benchmark-llm-as-a-judge:0.12.21"
+    retriever: "nvcr.io/nvidia/nemo-microservices/eval-tool-benchmark-retriever:0.12.21"
+    rag: "nvcr.io/nvidia/nemo-microservices/eval-tool-benchmark-rag:0.12.21"
+    bfcl: "nvcr.io/nvidia/nemo-microservices/eval-factory-benchmark-bfcl:25.6.1"
+    agenticEval: "nvcr.io/nvidia/nemo-microservices/eval-factory-benchmark-agentic-eval:25.6.1"
+  argoWorkflows:
+    # endpoint will be templated in the template file
+    serviceAccount: argo-workflows-executor
+  vectorDB:
+    # endpoint will be templated in the template file
+  database:
+    # host will be templated in the template file
+    port: 5432
+    databaseName: evaldb
+    user: evaluser
+    secretName: evaluator-pg-existing-secret
+    passwordKey: password
+  otel:
+    enabled: true
+    # exporterOtlpEndpoint will be templated in the template file
+  replicas: 1
+
+# ===== NemoGuardrail Configuration =====
+# Image: nvcr.io/nvidia/nemo-microservices/guardrails:25.08 (exact from quickstart)
+guardrail:
+  enabled: true
+  name: nemoguardrails-sample
+  image:
+    repository: nvcr.io/nvidia/nemo-microservices/guardrails
+    tag: "25.08"
+    pullPolicy: IfNotPresent
+  database:
+    # host will be templated in the template file
+    port: 5432
+    databaseName: guardraildb
+    user: guardrailuser
+    secretName: guardrail-pg-existing-secret
+    passwordKey: password
+  configStorePVC:
+    name: "pvc-guardrail-config"
+    create: true
+    size: "1Gi"
+  replicas: 1
+  resources:
+    limits:
+      cpu: "1"
+      ephemeral-storage: 10Gi
+
+# ===== NIMCache Configuration =====
+# Model: meta/llama-3.2-1b-instruct:1.8.3 (exact from quickstart)
+nimCache:
+  enabled: true
+  name: meta-llama3-1b-instruct
+  modelPuller: nvcr.io/nim/meta/llama-3.2-1b-instruct:1.8.3
+  engine: tensorrt_llm
+  tensorParallelism: "1"
+  pullSecret: ngc-secret
+  authSecret: ngc-api-secret
+  pvc:
+    create: true
+    size: "50Gi"
+  tolerations:
+    - key: "g5-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+# ===== NIMPipeline Configuration =====
+# Model: nvcr.io/nim/meta/llama-3.2-1b-instruct:1.8.3 (exact from quickstart)
+nimPipeline:
+  enabled: true
+  name: llama3-1b-pipeline
+  serviceName: meta-llama3-1b-instruct
+  image:
+    repository: nvcr.io/nim/meta/llama-3.2-1b-instruct
+    tag: 1.8.3
+    pullPolicy: IfNotPresent
+  pullSecret: ngc-secret
+  authSecret: ngc-api-secret
+  nimCacheName: meta-llama3-1b-instruct
+  replicas: 1
+  resources:
+    limits:
+      gpu: 1
+  tolerations:
+    - key: "g5-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+

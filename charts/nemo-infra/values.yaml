@@ -1,0 +1,519 @@
+# NeMo Infrastructure Helm Chart Values
+# Replicates the exact Ansible deployment from QUICK-START-OpenShift.md
+
+# Installation namespace
+namespace:
+  create: false
+  name: arhkp-nemo-helm
+
+# Storage configuration
+pvc:
+  storageClass: "gp3-csi"
+  volumeAccessMode: ReadWriteOnce
+
+# Local path provisioner (disabled for OpenShift)
+localPathProvisioner:
+  enabled: false
+
+# Component installation flags
+install:
+  datastore: true
+  entityStore: true
+  customizer: true
+  jupyter: true
+  guardrail: true
+  evaluator: true
+  volcano: true
+  nemoOperator: true
+  nimOperator: true
+
+# ===== Datastore PostgreSQL Subchart =====
+datastore-postgresql:
+  image:
+    registry: registry-1.docker.io
+    repository: bitnami/postgresql
+    tag: latest
+  auth:
+    username: ndsuser
+    password: ndspass
+    database: ndsdb
+  architecture: standalone
+  primary:
+    persistence:
+      storageClass: "gp3-csi"
+      accessModes:
+        - ReadWriteOnce
+      enabled: true
+      size: 500Mi
+
+# ===== Entity Store PostgreSQL Subchart =====
+entity-store-postgresql:
+  image:
+    registry: registry-1.docker.io
+    repository: bitnami/postgresql
+    tag: latest
+  auth:
+    username: nesuser
+    password: nespass
+    database: nesdb
+  architecture: standalone
+  primary:
+    persistence:
+      storageClass: "gp3-csi"
+      accessModes:
+        - ReadWriteOnce
+      enabled: true
+      size: 500Mi
+
+# ===== Customizer PostgreSQL Subchart =====
+customizer-postgresql:
+  image:
+    registry: registry-1.docker.io
+    repository: bitnami/postgresql
+    tag: latest
+  auth:
+    username: ncsuser
+    password: ncspassword
+    database: ncsdb
+  architecture: standalone
+  primary:
+    persistence:
+      storageClass: "gp3-csi"
+      accessModes:
+        - ReadWriteOnce
+      enabled: true
+      size: 500Mi
+
+# ===== Guardrail PostgreSQL Subchart =====
+guardrail-postgresql:
+  image:
+    registry: registry-1.docker.io
+    repository: bitnami/postgresql
+    tag: latest
+  auth:
+    username: guardrailuser
+    password: guardrailpass
+    database: guardraildb
+  architecture: standalone
+  primary:
+    persistence:
+      storageClass: "gp3-csi"
+      accessModes:
+        - ReadWriteOnce
+      enabled: true
+      size: 500Mi
+
+# ===== Evaluator PostgreSQL Subchart =====
+evaluator-postgresql:
+  image:
+    registry: registry-1.docker.io
+    repository: bitnami/postgresql
+    tag: latest
+  auth:
+    username: evaluser
+    password: evalpass
+    database: evaldb
+  architecture: standalone
+  primary:
+    persistence:
+      storageClass: "gp3-csi"
+      accessModes:
+        - ReadWriteOnce
+      enabled: true
+      size: 500Mi
+
+# ===== Customizer MLflow Subchart =====
+customizer-mlflow:
+  global:
+    storageClass: "gp3-csi"
+  image:
+    registry: docker.io
+    repository: library/python
+    tag: 3.9-slim
+  gitImage:
+    registry: docker.io
+    repository: alpine/git
+    tag: latest
+  volumePermissions:
+    enabled: false
+    image:
+      registry: docker.io
+      repository: library/busybox
+      tag: latest
+  minio:
+    enabled: true
+    image:
+      registry: quay.io
+      repository: minio/minio
+      tag: latest
+    auth:
+      rootUser: "minioadmin"
+      rootPassword: "minioadmin"
+    defaultBuckets: "mlflow"
+    persistence:
+      mountPath: "/data"
+    enableDefaultInitContainers: false
+    provisioning:
+      enabled: false
+    extraEnvVars:
+      - name: MINIO_ROOT_USER
+        value: "minioadmin"
+      - name: MINIO_ROOT_PASSWORD
+        value: "minioadmin"
+      - name: MINIO_DEFAULT_BUCKETS
+        value: "mlflow"
+    command:
+      - "/usr/bin/docker-entrypoint.sh"
+    args:
+      - "minio"
+      - "server"
+      - "/data"
+      - "--console-address"
+      - ":9001"
+  postgresql:
+    enabled: true
+    image:
+      registry: registry-1.docker.io
+      repository: bitnami/postgresql
+      tag: latest
+    auth:
+      username: bn_mlflow
+      password: bn_mlflow
+    enableDefaultInitContainers: false
+  tracking:
+    enabled: true
+    auth:
+      enabled: false
+    runUpgradeDB: false
+    enableDefaultInitContainers: false
+    service:
+      type: ClusterIP
+    resourcesPreset: medium
+    persistence:
+      enabled: true
+      storageClass: "gp3-csi"
+      size: 8Gi
+    command:
+      - /bin/sh
+      - -c
+      - |
+        pip install --prefix=/tmp/pip-install mlflow==2.12.2 psycopg2-binary
+        export PATH="/tmp/pip-install/bin:$PATH"
+        export PYTHONPATH="/tmp/pip-install/lib/python3.9/site-packages:$PYTHONPATH"
+        mlflow server \
+          --backend-store-uri=postgresql://bn_mlflow:$(MLFLOW_DATABASE_PASSWORD)@nemo-infra-postgresql:5432/bitnami_mlflow \
+          --artifacts-destination=/bitnami/mlflow/mlartifacts \
+          --serve-artifacts \
+          --host=0.0.0.0 \
+          --port=5000
+  run:
+    enabled: false
+
+# ===== Customizer OpenTelemetry Subchart =====
+customizer-opentelemetry:
+  mode: deployment
+  image:
+    repository: "otel/opentelemetry-collector-k8s"
+    tag: "0.102.1"
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc: {}
+          http:
+            cors:
+              allowed_origins:
+                - "*"
+    exporters:
+      debug:
+        verbosity: detailed
+    extensions:
+      health_check: {}
+      zpages:
+        endpoint: 0.0.0.0:55679
+    processors:
+      batch: {}
+    service:
+      extensions: [zpages, health_check]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          exporters: [debug]
+          processors: [batch]
+        metrics:
+          receivers: [otlp]
+          exporters: [debug]
+          processors: [batch]
+        logs:
+          receivers: [otlp]
+          exporters: [debug]
+          processors: [batch]
+
+# ===== Evaluator OpenTelemetry Subchart =====
+evaluator-opentelemetry:
+  mode: deployment
+  image:
+    repository: "otel/opentelemetry-collector-k8s"
+    tag: "0.102.1"
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc: {}
+          http:
+            cors:
+              allowed_origins:
+                - "*"
+    exporters:
+      debug:
+        verbosity: detailed
+    extensions:
+      health_check: {}
+      zpages:
+        endpoint: 0.0.0.0:55679
+    processors:
+      batch: {}
+    service:
+      extensions: [zpages, health_check]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          exporters: [debug]
+          processors: [batch]
+        metrics:
+          receivers: [otlp]
+          exporters: [debug]
+          processors: [batch]
+        logs:
+          receivers: [otlp]
+          exporters: [debug]
+          processors: [batch]
+
+# ===== Evaluator Argo Workflows Subchart =====
+evaluator-argo:
+  nameOverride: argo-workflows
+  serviceName: argo-workflows-server
+  server:
+    replicas: 1
+    authModes:
+      - "server"
+    servicePort: 2746
+    secure: true
+    clusterWorkflowTemplates:
+      enabled: false
+  # CRD installation: Enable to install Argo Workflows CRDs
+  # If CRDs already exist from another installation, set to false to avoid conflicts
+  crds:
+    install: true  # Changed to true to ensure CRDs are installed during Helm deployment
+    keep: true     # Keep CRDs on chart uninstall (prevents accidental deletion)
+  singleNamespace: true
+  createAggregateRoles: false
+  workflow:
+    rbac:
+      create: true
+  controller:
+    replicas: 1
+    clusterWorkflowTemplates:
+      enabled: false
+    workflowDefaults:
+      spec:
+        imagePullSecrets:
+        - name: ngc-secret
+        - name: nvcrimagepullsecret
+        podMetadata:
+          annotations:
+            openshift.io/required-scc: anyuid
+
+# ===== Evaluator Milvus Subchart =====
+evaluator-milvus:
+  serviceName: milvus
+  cluster:
+    enabled: false
+  etcd:
+    enabled: false
+  pulsar:
+    enabled: false
+  minio:
+    enabled: false
+    tls:
+      enabled: false
+  standalone:
+    persistence:
+      enabled: true
+      persistentVolumeClaim:
+        size: 50Gi
+        storageClass: ""
+    extraEnv:
+      - name: LOG_LEVEL
+        value: debug
+  extraConfigFiles:
+    user.yaml: |+
+      etcd:
+        use:
+          embed: true
+        data:
+          dir: /var/lib/milvus/etcd
+      common:
+        storageType: local
+  serviceAccount:
+    create: false
+    name: milvus
+
+# ===== Jupyter Configuration (Kubernetes manifests, not Helm chart) =====
+jupyter:
+  enabled: true
+  token: token
+  image: jupyter/base-notebook:latest
+  deploymentName: jupyter-notebook
+  serviceName: jupyter-service
+  pvcName: jupyter-pvc
+  configName: config.py
+  notebookName: e2e-notebook.ipynb
+  notebookContent: ""
+  configContent: ""
+  storage:
+    size: 5Gi
+    mountPath: /home/jovyan/work
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+# ===== Argo Service Account (for OpenShift RBAC) =====
+argo:
+  serviceAccount:
+    name: argo-workflows-executor
+    imagePullSecrets:
+      - name: nvcrimagepullsecret
+
+# ===== Milvus Service Account (for OpenShift RBAC) =====
+milvus:
+  serviceAccount:
+    name: milvus
+
+# ===== Volcano Scheduler Subchart =====
+volcano:
+  # Volcano chart configuration
+  # Following quickstart: helm install volcano volcano/volcano --version 1.9.0
+  # Note: The privileged SCC is granted via RBAC Role/Binding in templates/volcano/oc-rbac.yaml
+  # If RBAC approach doesn't work, you may need to manually run:
+  # oc adm policy add-scc-to-user privileged system:serviceaccount:<namespace>:volcano-scheduler
+  
+  # CRITICAL: Namespace-scoped webhooks for multi-tenant safety
+  # Without this, Volcano webhooks are cluster-wide and affect ALL namespaces
+  # This ensures webhooks ONLY intercept resources in specified namespaces
+  # 
+  # IMPORTANT: If Volcano is already installed in another namespace:
+  # - Option 1: Add that namespace to the values list below (both namespaces will share this installation)
+  # - Option 2: Keep installations separate - each watches only its own namespace (no conflicts, recommended)
+  #
+  # The deployment namespace is automatically included. Manually add additional namespaces if needed.
+  custom:
+    # Scope webhooks to specified namespaces (BEST PRACTICE for shared clusters)
+    # This prevents Volcano from intercepting resources in other namespaces
+    # 
+    # To include multiple namespaces (e.g., if Volcano already exists in another namespace):
+    # Add the namespace names to the values list below:
+    # values: ["arhkp-nemo-helm", "existing-volcano-namespace"]
+    # Namespace scoping configuration for Volcano webhooks
+    # The Volcano chart automatically adds a default exclusion for {{ .Release.Namespace }} and kube-system
+    # Then it appends our custom expressions. In Kubernetes, matchExpressions are AND-ed together.
+    #
+    # IMPORTANT: When you specify webhooks_namespace_selector_expressions, you're ADDING to the default exclusion.
+    # The rendered output may show both NotIn and In for the same namespace, which seems contradictory.
+    # However, this matches the reference implementation and appears to work correctly in practice.
+    #
+    # To include multiple namespaces (e.g., if Volcano already exists in another namespace):
+    # Add the namespace names to the values list below:
+    webhooks_namespace_selector_expressions:
+      - key: kubernetes.io/metadata.name
+        operator: In
+        values:
+          - arhkp-nemo-helm  # Deployment namespace
+          # Add additional namespaces here if you want this Volcano installation to watch them:
+          # - existing-volcano-namespace
+          # - another-namespace
+    
+    # Resource limits for Volcano components
+    scheduler_resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+    
+    controller_resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+    
+    admission_resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
+    
+    # Enable admission webhooks (required for NeMo Operator)
+    admission_enable: true
+    admission_replicas: 1
+
+# ===== NeMo Operator Subchart =====
+nemo-operator:
+  # NeMo Operator chart configuration
+  # Following quickstart Step 4 (lines 114-133):
+  # - Helm install with resource limits (lines 122-126)
+  # - ServiceAccount configured with ngc-secret from the start (no patching needed)
+  # 
+  # Prerequisites (quickstart lines 43-47):
+  # - ngc-secret must be created manually BEFORE installation:
+  #   oc create secret docker-registry ngc-secret \
+  #     --docker-server=nvcr.io \
+  #     --docker-username='$oauthtoken' \
+  #     --docker-password=$NGC_API_KEY \
+  #     -n <namespace>
+  
+  # Image pull secrets configuration (uses ngc-secret directly, no patching required)
+  imagePullSecrets:
+    - name: ngc-secret
+  
+  # Manager resource configuration (exact from quickstart lines 124-125)
+  manager:
+    resources:
+      limits:
+        memory: 512Mi
+      requests:
+        memory: 256Mi
+
+# ===== NIM Operator Subchart =====
+nim-operator:
+  # NIM Operator chart configuration
+  # Following quickstart Step 5 (lines 137-150):
+  # - Uses local OpenShift-specific Helm chart (NOT the official NVIDIA repo chart)
+  # - Image: ghcr.io/nvidia/k8s-nim-operator:release-3.0 (exact from chart values.yaml)
+  # - Resource limits: 512Mi limit, 256Mi request (exact from quickstart lines 143-144)
+  # 
+  # CRITICAL: OpenShift requires the local Helm chart from deploy-on-openshift/deployments/helm/k8s-nim-operator
+  # The official NVIDIA Helm repository chart (nvidia/k8s-nim-operator) is NOT compatible with OpenShift
+  # due to security context and permission differences (quickstart line 150)
+  
+  # Operator resource configuration (exact from quickstart lines 143-144)
+  operator:
+    resources:
+      limits:
+        memory: 512Mi
+      requests:
+        memory: 256Mi
+    # Image configuration (exact from chart values.yaml)
+    image:
+      repository: ghcr.io/nvidia/k8s-nim-operator
+      tag: release-3.0
+      pullPolicy: Always
