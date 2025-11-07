@@ -81,32 +81,33 @@ oc create secret generic guardrail-pg-existing-secret \
 - Evaluator: `evalpass`
 - Guardrail: `guardrailpass`
 
-#### Datastore Secrets (Required for NemoDatastore)
+#### Datastore Secrets (Automatically Created)
+
+**IMPORTANT**: The datastore secrets are **automatically created** by the Helm chart. You do NOT need to create them manually.
+
+The following secrets are created automatically when `datastore.enabled: true`:
+- `nemo-ms-nemo-datastore` - Datastore configuration scripts
+- `nemo-ms-nemo-datastore-init` - Init container scripts (init_directory_structure.sh, configure_gitea.sh, etc.)
+- `nemo-ms-nemo-datastore-inline-config` - Gitea inline configuration
+- `gitea-admin-credentials` - Gitea admin user credentials (configurable via `datastore.gitea.*`)
+- `nemo-ms-nemo-datastore--lfs-jwt` - LFS JWT secret (configurable via `datastore.lfsJwtSecret`)
+
+These secrets are created from the `datastore-secrets.yaml` template.
+
+**Security Note**: Default credentials are provided for **development/testing only** (matching quickstart defaults). These are exposed in `values.yaml` for convenience but **MUST be overridden for production**:
+
 ```bash
-# These secrets are required by the NemoDatastore service
-# Create them with appropriate values (see quickstart for details)
+# For production: Override via --set flags
+export GITEA_ADMIN_PASSWORD="$(openssl rand -base64 32)"
+export LFS_JWT_SECRET="$(openssl rand -base64 32 | base64)"
 
-oc create secret generic nemo-ms-nemo-datastore \
-  --from-literal=config=<datastore-config> \
-  -n <namespace>
-
-oc create secret generic nemo-ms-nemo-datastore-init \
-  --from-literal=init=<datastore-init-scripts> \
-  -n <namespace>
-
-oc create secret generic nemo-ms-nemo-datastore-inline-config \
-  --from-literal=config=<inline-config> \
-  -n <namespace>
-
-oc create secret generic gitea-admin-credentials \
-  --from-literal=GITEA_ADMIN_USERNAME=datastore_admin \
-  --from-literal=GITEA_ADMIN_PASSWORD=<password> \
-  -n <namespace>
-
-oc create secret generic nemo-ms-nemo-datastore--lfs-jwt \
-  --from-literal=jwtSecret=<jwt-secret> \
-  -n <namespace>
+helm install nemo-samples ./charts/nemo-samples \
+  -n arhkp-nemo-helm \
+  --set datastore.gitea.adminPassword=$GITEA_ADMIN_PASSWORD \
+  --set datastore.lfsJwtSecret=$LFS_JWT_SECRET
 ```
+
+**⚠️ WARNING**: Do NOT use default credentials in production environments!
 
 #### Optional Secrets
 

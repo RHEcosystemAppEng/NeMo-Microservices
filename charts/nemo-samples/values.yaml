@@ -66,6 +66,19 @@ customizer:
       operator: "Equal"
       value: "true"
       effect: "NoSchedule"
+  # Resource requests/limits for training job pods
+  # Ephemeral storage is critical - the customizer image is ~62GB
+  resources:
+    requests:
+      ephemeral-storage: "80Gi"  # Enough for image pull + container filesystem
+      memory: "32Gi"
+      cpu: "4"
+      nvidia.com/gpu: "1"
+    limits:
+      ephemeral-storage: "100Gi"  # Upper limit to prevent node issues
+      memory: "64Gi"
+      cpu: "8"
+      nvidia.com/gpu: "1"
 
 # ===== NemoDatastore Configuration =====
 # Image: nvcr.io/nvidia/nemo-microservices/datastore:25.08 (exact from quickstart)
@@ -101,6 +114,16 @@ datastore:
     datastoreInlineConfigSecret: "nemo-ms-nemo-datastore-inline-config"
     giteaAdminSecret: "gitea-admin-credentials"
     lfsJwtSecret: "nemo-ms-nemo-datastore--lfs-jwt"
+  # Gitea admin credentials (DEV/TEST ONLY - override for production)
+  # These defaults match the quickstart for development/testing environments
+  # For production: Override via --set or environment variables
+  gitea:
+    adminUsername: "datastore_admin"  # DEV DEFAULT - override for production
+    adminPassword: "s3aJPHD9!bt6d0I"  # DEV DEFAULT - override for production
+  # LFS JWT secret (DEV/TEST ONLY - override for production)
+  # Default matches quickstart for development/testing
+  # For production: Generate with: openssl rand -base64 32 | base64
+  lfsJwtSecret: "VjNwcWQxSlViMnR5YkRSbFVuSjZlVUpTY0d0R2IxSldUM0UyZWpsUGRuUQ=="  # DEV DEFAULT - override for production
 
 # ===== NemoEntitystore Configuration =====
 # Image: nvcr.io/nvidia/nemo-microservices/entity-store:25.08 (exact from quickstart)

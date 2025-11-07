@@ -119,5 +119,11 @@ spec:
     # Node tolerations
     tolerations:
 {{- toYaml .Values.customizer.tolerations | nindent 6 }}
+    # Resource requests/limits for training job pods
+    # Ephemeral storage prevents eviction during large image pulls
+{{- if .Values.customizer.resources }}
+    resources:
+{{- toYaml .Values.customizer.resources | nindent 6 }}
+{{- end }}
 {{- end }}
 
