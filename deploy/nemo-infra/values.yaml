@@ -24,8 +24,6 @@ install:
   guardrail: true
   evaluator: true
   volcano: true
-  nemoOperator: true
-  nimOperator: true
 
 # ===== Datastore PostgreSQL Subchart =====
 datastore-postgresql:
@@ -465,55 +463,3 @@ volcano:
     # Enable admission webhooks (required for NeMo Operator)
     admission_enable: true
     admission_replicas: 1
-
-# ===== NeMo Operator Subchart =====
-nemo-operator:
-  # NeMo Operator chart configuration
-  # Following quickstart Step 4 (lines 114-133):
-  # - Helm install with resource limits (lines 122-126)
-  # - ServiceAccount configured with ngc-secret from the start (no patching needed)
-  # 
-  # Prerequisites (quickstart lines 43-47):
-  # - ngc-secret must be created manually BEFORE installation:
-  #   oc create secret docker-registry ngc-secret \
-  #     --docker-server=nvcr.io \
-  #     --docker-username='$oauthtoken' \
-  #     --docker-password=$NGC_API_KEY \
-  #     -n <namespace>
-  
-  # Image pull secrets configuration (uses ngc-secret directly, no patching required)
-  imagePullSecrets:
-    - name: ngc-secret
-  
-  # Manager resource configuration (exact from quickstart lines 124-125)
-  manager:
-    resources:
-      limits:
-        memory: 512Mi
-      requests:
-        memory: 256Mi
-
-# ===== NIM Operator Subchart =====
-nim-operator:
-  # NIM Operator chart configuration
-  # Following quickstart Step 5 (lines 137-150):
-  # - Uses local OpenShift-specific Helm chart (NOT the official NVIDIA repo chart)
-  # - Image: ghcr.io/nvidia/k8s-nim-operator:release-3.0 (exact from chart values.yaml)
-  # - Resource limits: 512Mi limit, 256Mi request (exact from quickstart lines 143-144)
-  # 
-  # CRITICAL: OpenShift requires the local Helm chart from deploy-on-openshift/deployments/helm/k8s-nim-operator
-  # The official NVIDIA Helm repository chart (nvidia/k8s-nim-operator) is NOT compatible with OpenShift
-  # due to security context and permission differences (quickstart line 150)
-  
-  # Operator resource configuration (exact from quickstart lines 143-144)
-  operator:
-    resources:
-      limits:
-        memory: 512Mi
-      requests:
-        memory: 256Mi
-    # Image configuration (exact from chart values.yaml)
-    image:
-      repository: ghcr.io/nvidia/k8s-nim-operator
-      tag: release-3.0
-      pullPolicy: Always

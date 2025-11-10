@@ -1,0 +1,30 @@
+apiVersion: v2
+name: nemo-instances
+description: NVIDIA NeMo Microservices Instances - Example Deployments
+type: application
+version: 1.0.0
+appVersion: "25.08"
+keywords:
+  - nvidia
+  - nemo
+  - instances
+  - microservices
+maintainers:
+  - name: NeMo Instances Team
+
+dependencies:
+  # NeMo Operator (must be installed first)
+  - name: nemo-operator
+    version: "25.06"
+    repository: https://helm.ngc.nvidia.com/nvidia-nemo
+    condition: install.nemoOperator
+    alias: nemo-operator
+  # NIM Operator (local chart - OpenShift-specific, must be installed after NeMo Operator)
+  # Note: Chart must be packaged and placed in charts/ directory
+  # Run: cd ../../../deploy-on-openshift/deployments/helm/k8s-nim-operator && helm package . --destination ../../../../NeMo-Microservices/deploy/nemo-instances/charts
+  - name: k8s-nim-operator
+    version: "3.0.0"
+    repository: file://charts
+    condition: install.nimOperator
+    alias: nim-operator
+

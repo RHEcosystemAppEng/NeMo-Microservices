@@ -79,17 +79,3 @@ dependencies:
     repository: https://volcano-sh.github.io/helm-charts
     condition: install.volcano
     alias: volcano
-  # NeMo Operator
-  - name: nemo-operator
-    version: "25.06"
-    repository: https://helm.ngc.nvidia.com/nvidia-nemo
-    condition: install.nemoOperator
-    alias: nemo-operator
-  # NIM Operator (local chart - OpenShift-specific)
-  # Note: Chart must be packaged and placed in charts/ directory
-  # Run: cd ../../../deploy-on-openshift/deployments/helm/k8s-nim-operator && helm package . --destination ../../../../NeMo-Microservices/charts/nemo-infra/charts
-  - name: k8s-nim-operator
-    version: "3.0.0"
-    repository: file://charts
-    condition: install.nimOperator
-    alias: nim-operator

@@ -5,10 +5,10 @@ metadata:
   name: {{ .Values.customizer.trainingConfig.name }}
   namespace: {{ .Values.namespace.name }}
   labels:
-    app.kubernetes.io/name: nemo-samples
+    app.kubernetes.io/name: nemo-instances
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/component: customizer
-    app.kubernetes.io/part-of: nemo-samples
+    app.kubernetes.io/part-of: nemo-instances
 data:
   training: |-
     container_defaults:

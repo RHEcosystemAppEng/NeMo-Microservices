@@ -118,7 +118,7 @@ You can also run the notebook locally on your machine and connect to the NeMo Mi
    
    Create a `.env` file in the `jupyter-notebook` directory:
    ```bash
-   cd /path/to/NeMo-Microservices/samples/jupyter-notebook
+   cd /path/to/NeMo-Microservices/demos/jupyter-notebook
    cat > .env << EOF
    HF_TOKEN=your-huggingface-token-here
    RUN_LOCALLY=true
@@ -163,7 +163,7 @@ You can also run the notebook locally on your machine and connect to the NeMo Mi
 4. **Launch Jupyter locally**
 
    ```bash
-   cd /path/to/NeMo-Microservices/samples/jupyter-notebook
+   cd /path/to/NeMo-Microservices/demos/jupyter-notebook
    jupyter lab
    ```
 
