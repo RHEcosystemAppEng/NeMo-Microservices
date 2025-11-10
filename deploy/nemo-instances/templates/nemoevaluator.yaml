@@ -45,6 +45,24 @@ spec:
   otel:
     enabled: {{ .Values.evaluator.otel.enabled }}
     exporterOtlpEndpoint: http://evaluator-otel-opentelemetry-collector.{{ .Values.namespace.name }}.svc.cluster.local:4317
+{{- if .Values.evaluator.env }}
+  env:
+{{- range .Values.evaluator.env }}
+    - name: {{ .name }}
+      {{- if eq .name "NIM_PROXY_URL" }}
+      # Automatically construct NIM service URL using nimPipeline.serviceName and namespace
+      {{- $nimServiceName := "meta-llama3-1b-instruct" }}
+      {{- if hasKey $.Values "nimPipeline" }}
+        {{- if hasKey $.Values.nimPipeline "serviceName" }}
+          {{- $nimServiceName = $.Values.nimPipeline.serviceName }}
+        {{- end }}
+      {{- end }}
+      value: "http://{{ $nimServiceName }}.{{ $.Values.namespace.name }}.svc.cluster.local:8000"
+      {{- else }}
+      value: {{ .value | quote }}
+      {{- end }}
+{{- end }}
+{{- end }}
   replicas: {{ .Values.evaluator.replicas }}
 {{- end }}
 
