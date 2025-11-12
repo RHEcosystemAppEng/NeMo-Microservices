@@ -64,7 +64,7 @@ This Helm chart deploys all infrastructure components required for NVIDIA NeMo m
 | **MinIO** | Object storage for MLflow artifacts and other data |
 | **Volcano Scheduler** | Advanced scheduler for Kubernetes workloads, required for NeMo Operator |
 
-![Layers Architecture]("images/Llamastack_NeMo_layers_architecture_diagram.png")
+![Layers Architecture]("../../images/Llamastack_NeMo_layers_architecture_diagram.png")
 
 ## Quick Start
 
