@@ -26,7 +26,7 @@ spec:
       type: ClusterIP
       port: 8000
   argoWorkflows:
-    endpoint: https://argo-workflows-server.{{ .Values.namespace.name }}.svc.cluster.local:2746
+    endpoint: https://nemo-infra-argo-workflows-server.{{ .Values.namespace.name }}.svc.cluster.local:2746
     serviceAccount: {{ .Values.evaluator.argoWorkflows.serviceAccount }}
   vectorDB:
     endpoint: http://milvus.{{ .Values.namespace.name }}.svc.cluster.local:19530

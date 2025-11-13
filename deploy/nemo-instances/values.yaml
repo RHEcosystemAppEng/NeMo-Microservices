@@ -5,7 +5,7 @@
 
 # Installation namespace
 namespace:
-  name: arhkp-nemo-helm
+  name: anemo-rhoai
 
 # Component installation flags
 install:

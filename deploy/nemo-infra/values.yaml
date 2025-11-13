@@ -4,7 +4,7 @@
 # Installation namespace
 namespace:
   create: false
-  name: arhkp-nemo-helm
+  name: anemo-rhoai
 
 # Storage configuration
 pvc:
