@@ -1,0 +1,83 @@
+{{- if .Values.install.volcano }}
+# Post-install hook to fix Volcano webhook namespace selector
+# The Volcano chart adds a default NotIn exclusion which conflicts with our In inclusion
+# This hook removes the NotIn exclusion to keep only the In expression for namespace scoping
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: volcano-webhook-patch
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      serviceAccountName: volcano-webhook-patch
+      restartPolicy: OnFailure
+      containers:
+      - name: kubectl
+        image: registry.redhat.io/openshift4/ose-cli:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          # Wait for Volcano webhooks to be created
+          sleep 10
+          
+          # Get namespace from values
+          NAMESPACE="{{ .Values.namespace.name }}"
+          
+          # Patch all three Volcano webhooks to use In operator only
+          for webhook in jobs-validate pods-validate queues-validate; do
+            echo "Patching volcano-admission-service-$webhook..."
+            oc patch validatingwebhookconfiguration volcano-admission-service-$webhook \
+              --type='json' \
+              -p="[{\"op\": \"replace\", \"path\": \"/webhooks/0/namespaceSelector\", \"value\": {\"matchExpressions\": [{\"key\": \"kubernetes.io/metadata.name\", \"operator\": \"In\", \"values\": [\"$NAMESPACE\"]}]}}]" || \
+            echo "Webhook volcano-admission-service-$webhook not found or already patched"
+          done
+          
+          echo "Volcano webhook patching completed"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: volcano-webhook-patch
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: volcano-webhook-patch
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+rules:
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources: ["validatingwebhookconfigurations"]
+  verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: volcano-webhook-patch
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+subjects:
+- kind: ServiceAccount
+  name: volcano-webhook-patch
+  namespace: {{ .Values.namespace.name }}
+roleRef:
+  kind: ClusterRole
+  name: volcano-webhook-patch
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+
