@@ -269,6 +269,61 @@ nimPipeline:
       operator: "Exists"
       effect: "NoSchedule"
 
+# ===== NIMCache Embedding Configuration =====
+# Model: nvcr.io/nim/nvidia/llama-3.2-nv-embedqa-1b-v2:1.3.1 (embedding model for RAG)
+# Using official model from: deploy-on-openshift/config/samples/nim/pipelines/rag/nimcache-embedding.yaml
+# This model supports NIMCache properly (has model_manifest.yaml)
+nimCacheEmbedding:
+  enabled: true
+  name: nv-embedqa-1b-v2
+  modelPuller: nvcr.io/nim/nvidia/llama-3.2-nv-embedqa-1b-v2:1.3.1
+  engine: tensorrt  # Embedding models use tensorrt, not tensorrt_llm
+  # Note: tensorParallelism is NOT used for embedding models (only for LLM with tensorrt_llm)
+  pullSecret: ngc-secret
+  authSecret: ngc-api-secret
+  # OpenShift-compatible UIDs (required for nonroot SCC)
+  # Range: 1000790000-1000799999
+  userID: 1000790000
+  groupID: 1000790000
+  pvc:
+    create: true
+    size: "50Gi"  # Official sample uses 50Gi
+  tolerations:
+    - key: "g5-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+# ===== NIMPipeline Embedding Configuration =====
+# Model: nvcr.io/nim/nvidia/llama-3.2-nv-embedqa-1b-v2:1.3.1 (embedding model for RAG)
+# Using official model that supports NIMCache
+nimPipelineEmbedding:
+  enabled: true
+  name: embedding-1b-v2-pipeline
+  serviceName: nv-embedqa-1b-v2
+  image:
+    repository: nvcr.io/nim/nvidia/llama-3.2-nv-embedqa-1b-v2
+    tag: 1.3.1
+    pullPolicy: IfNotPresent
+  pullSecret: ngc-secret
+  authSecret: ngc-api-secret
+  nimCacheName: nv-embedqa-1b-v2
+  replicas: 1
+  resources:
+    limits:
+      gpu: 1
+  tolerations:
+    - key: "g5-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+
 # ===== NeMo Operator Subchart =====
 nemo-operator:
   # NeMo Operator chart configuration
