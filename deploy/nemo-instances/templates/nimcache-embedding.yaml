@@ -1,0 +1,34 @@
+{{- if .Values.nimCacheEmbedding.enabled }}
+apiVersion: apps.nvidia.com/v1alpha1
+kind: NIMCache
+metadata:
+  name: {{ .Values.nimCacheEmbedding.name }}
+  namespace: {{ .Values.namespace.name }}
+spec:
+  # OpenShift-compatible UIDs (required for nonroot SCC)
+  # Range: 1000790000-1000799999
+  userID: {{ int (.Values.nimCacheEmbedding.userID | default 1000790000) }}
+  groupID: {{ int (.Values.nimCacheEmbedding.groupID | default 1000790000) }}
+  # GPU node tolerations for OpenShift/Kubernetes clusters with tainted GPU nodes
+  tolerations:
+{{- toYaml .Values.nimCacheEmbedding.tolerations | nindent 4 }}
+  source:
+    ngc:
+      modelPuller: {{ .Values.nimCacheEmbedding.modelPuller | quote }}
+      pullSecret: {{ .Values.nimCacheEmbedding.pullSecret }}
+      authSecret: {{ .Values.nimCacheEmbedding.authSecret }}
+      model:
+        engine: {{ .Values.nimCacheEmbedding.engine }}
+{{- if .Values.nimCacheEmbedding.tensorParallelism }}
+        tensorParallelism: {{ .Values.nimCacheEmbedding.tensorParallelism | quote }}
+{{- end }}
+  storage:
+    pvc:
+      create: {{ .Values.nimCacheEmbedding.pvc.create }}
+{{- if .Values.storage.storageClass }}
+      storageClass: {{ .Values.storage.storageClass | quote }}
+{{- end }}
+      size: {{ .Values.nimCacheEmbedding.pvc.size | quote }}
+      volumeAccessMode: {{ .Values.storage.volumeAccessMode }}
+{{- end }}
+

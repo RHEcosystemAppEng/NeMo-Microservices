@@ -1,0 +1,5 @@
+# JSON files
+*.json
+*.jsonl
+.DS_Store
+

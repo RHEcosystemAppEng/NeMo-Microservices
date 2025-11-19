@@ -1,0 +1,68 @@
+{{- if .Values.evaluator.enabled }}
+apiVersion: apps.nvidia.com/v1alpha1
+kind: NemoEvaluator
+metadata:
+  name: {{ .Values.evaluator.name }}
+  namespace: {{ .Values.namespace.name }}
+spec:
+  evaluationImages:
+    bigcodeEvalHarness: {{ .Values.evaluator.evaluationImages.bigcodeEvalHarness | quote }}
+    lmEvalHarness: {{ .Values.evaluator.evaluationImages.lmEvalHarness | quote }}
+    similarityMetrics: {{ .Values.evaluator.evaluationImages.similarityMetrics | quote }}
+    llmAsJudge: {{ .Values.evaluator.evaluationImages.llmAsJudge | quote }}
+    mtBench: {{ .Values.evaluator.evaluationImages.mtBench | quote }}
+    retriever: {{ .Values.evaluator.evaluationImages.retriever | quote }}
+    rag: {{ .Values.evaluator.evaluationImages.rag | quote }}
+    bfcl: {{ .Values.evaluator.evaluationImages.bfcl | quote }}
+    agenticEval: {{ .Values.evaluator.evaluationImages.agenticEval | quote }}
+  image:
+    repository: {{ .Values.evaluator.image.repository }}
+    tag: {{ .Values.evaluator.image.tag | quote }}
+    pullPolicy: {{ .Values.evaluator.image.pullPolicy }}
+    pullSecrets:
+      - ngc-secret
+  expose:
+    service:
+      type: ClusterIP
+      port: 8000
+  argoWorkflows:
+    endpoint: https://nemo-infra-argo-workflows-server.{{ .Values.namespace.name }}.svc.cluster.local:2746
+    serviceAccount: {{ .Values.evaluator.argoWorkflows.serviceAccount }}
+  vectorDB:
+    endpoint: http://milvus.{{ .Values.namespace.name }}.svc.cluster.local:19530
+  datastore:
+    endpoint: http://{{ .Values.datastore.name }}.{{ .Values.namespace.name }}.svc.cluster.local:8000/v1/hf
+  entitystore:
+    endpoint: http://{{ .Values.entitystore.name }}.{{ .Values.namespace.name }}.svc.cluster.local:8000
+  databaseConfig:
+    host: nemo-infra-evaluator-postgresql.{{ .Values.namespace.name }}.svc.cluster.local
+    port: {{ .Values.evaluator.database.port }}
+    databaseName: {{ .Values.evaluator.database.databaseName }}
+    credentials:
+      user: {{ .Values.evaluator.database.user }}
+      secretName: {{ .Values.evaluator.database.secretName }}
+      passwordKey: {{ .Values.evaluator.database.passwordKey }}
+  otel:
+    enabled: {{ .Values.evaluator.otel.enabled }}
+    exporterOtlpEndpoint: http://evaluator-otel-opentelemetry-collector.{{ .Values.namespace.name }}.svc.cluster.local:4317
+{{- if .Values.evaluator.env }}
+  env:
+{{- range .Values.evaluator.env }}
+    - name: {{ .name }}
+      {{- if eq .name "NIM_PROXY_URL" }}
+      # Automatically construct NIM service URL using nimPipeline.serviceName and namespace
+      {{- $nimServiceName := "meta-llama3-1b-instruct" }}
+      {{- if hasKey $.Values "nimPipeline" }}
+        {{- if hasKey $.Values.nimPipeline "serviceName" }}
+          {{- $nimServiceName = $.Values.nimPipeline.serviceName }}
+        {{- end }}
+      {{- end }}
+      value: "http://{{ $nimServiceName }}.{{ $.Values.namespace.name }}.svc.cluster.local:8000"
+      {{- else }}
+      value: {{ .value | quote }}
+      {{- end }}
+{{- end }}
+{{- end }}
+  replicas: {{ .Values.evaluator.replicas }}
+{{- end }}
+

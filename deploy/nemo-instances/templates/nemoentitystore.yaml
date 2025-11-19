@@ -1,0 +1,29 @@
+{{- if .Values.entitystore.enabled }}
+apiVersion: apps.nvidia.com/v1alpha1
+kind: NemoEntitystore
+metadata:
+  name: {{ .Values.entitystore.name }}
+  namespace: {{ .Values.namespace.name }}
+spec:
+  image:
+    repository: {{ .Values.entitystore.image.repository }}
+    tag: {{ .Values.entitystore.image.tag | quote }}
+    pullPolicy: {{ .Values.entitystore.image.pullPolicy }}
+    pullSecrets:
+      - ngc-secret
+  expose:
+    service:
+      type: ClusterIP
+      port: 8000
+  databaseConfig:
+    databaseName: {{ .Values.entitystore.database.databaseName }}
+    host: nemo-infra-entity-store-postgresql.{{ .Values.namespace.name }}.svc.cluster.local
+    port: {{ .Values.entitystore.database.port }}
+    credentials:
+      user: {{ .Values.entitystore.database.user }}
+      secretName: {{ .Values.entitystore.database.secretName }}
+      passwordKey: {{ .Values.entitystore.database.passwordKey }}
+  datastore:
+    endpoint: http://{{ .Values.datastore.name }}.{{ .Values.namespace.name }}.svc.cluster.local:8000
+{{- end }}
+

@@ -1,0 +1,42 @@
+{{- if .Values.guardrail.enabled }}
+apiVersion: apps.nvidia.com/v1alpha1
+kind: NemoGuardrail
+metadata:
+  name: {{ .Values.guardrail.name }}
+  namespace: {{ .Values.namespace.name }}
+spec:
+  # required if a NIM endpoint is hosted by NVIDIA
+  configStore:
+    pvc:
+      name: {{ .Values.guardrail.configStorePVC.name | quote }}
+      create: {{ .Values.guardrail.configStorePVC.create }}
+      storageClass: {{ .Values.storage.storageClass | quote }}
+      volumeAccessMode: {{ .Values.storage.volumeAccessMode }}
+      size: {{ .Values.guardrail.configStorePVC.size | quote }}
+  nimEndpoint:
+    baseURL: http://{{ .Values.nimPipeline.serviceName }}.{{ .Values.namespace.name }}.svc.cluster.local:8000/v1
+  databaseConfig:
+    host: nemo-infra-guardrail-postgresql.{{ .Values.namespace.name }}.svc.cluster.local
+    port: {{ .Values.guardrail.database.port }}
+    databaseName: {{ .Values.guardrail.database.databaseName }}
+    credentials:
+      user: {{ .Values.guardrail.database.user }}
+      secretName: {{ .Values.guardrail.database.secretName }}
+      passwordKey: {{ .Values.guardrail.database.passwordKey }}
+  expose:
+    service:
+      type: ClusterIP
+      port: 8000
+  image:
+    repository: {{ .Values.guardrail.image.repository }}
+    tag: {{ .Values.guardrail.image.tag | quote }}
+    pullPolicy: {{ .Values.guardrail.image.pullPolicy }}
+    pullSecrets:
+      - ngc-secret
+  metrics:
+    serviceMonitor: {}
+  replicas: {{ .Values.guardrail.replicas }}
+  resources:
+{{- toYaml .Values.guardrail.resources | nindent 4 }}
+{{- end }}
+

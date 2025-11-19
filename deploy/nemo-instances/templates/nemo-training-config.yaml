@@ -1,0 +1,19 @@
+{{- if .Values.customizer.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.customizer.trainingConfig.name }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app.kubernetes.io/name: nemo-instances
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: customizer
+    app.kubernetes.io/part-of: nemo-instances
+data:
+  training: |-
+    container_defaults:
+      env:
+        - name: LOG_LEVEL
+          value: INFO
+{{- end }}
+

@@ -1,0 +1,40 @@
+{{- if .Values.customizer.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.customizer.modelConfig.name }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app.kubernetes.io/name: nemo-instances
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: customizer
+    app.kubernetes.io/part-of: nemo-instances
+data:
+  customizationTargets: |-
+    overrideExistingTargets: true
+    targets:
+      meta/llama-3.2-1b-instruct@2.0:
+        base_model: meta/llama-3.2-1b-instruct
+        enabled: true
+        model_path: llama32_1b-instruct_2_0
+        model_uri: ngc://nvidia/nemo/llama-3_2-1b-instruct:2.0
+        name: llama-3.2-1b-instruct@2.0
+        namespace: meta
+        num_parameters: 1000000000
+        precision: bf16-mixed
+  customizationConfigTemplates: |-
+    overrideExistingTemplates: true
+    templates:
+      meta/llama-3.2-1b-instruct@v1.0.0:
+        max_seq_length: 4096
+        name: llama-3.2-1b-instruct@v1.0.0
+        namespace: meta
+        prompt_template: "{prompt} {completion}"
+        target: meta/llama-3.2-1b-instruct@2.0
+        training_options:
+        - finetuning_type: lora
+          micro_batch_size: 1
+          num_gpus: 1
+          training_type: sft
+{{- end }}
+
