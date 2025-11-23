@@ -50,8 +50,6 @@ spec:
                   key: NGC_API_KEY
             - name: NVIDIA_BASE_URL
               value: "http://meta-llama3-1b-instruct.YOUR_NEMO_NAMESPACE.svc.cluster.local:8000"
-            - name: NVIDIA_ENTITY_STORE_URL
-              value: "http://nemoentitystore-sample.YOUR_NEMO_NAMESPACE.svc.cluster.local:8000"
             - name: NVIDIA_DATASETS_URL
               value: "http://nemodatastore-sample.YOUR_NEMO_NAMESPACE.svc.cluster.local:8000"
             - name: NVIDIA_DATASET_NAMESPACE
@@ -66,8 +64,6 @@ spec:
               value: "demo-self-check-input-output"
             - name: NVIDIA_EVALUATOR_URL
               value: "http://nemoevaluator-sample.YOUR_NEMO_NAMESPACE.svc.cluster.local:8000"
-            - name: NIM_PROXY_URL
-              value: "http://meta-llama3-1b-instruct.YOUR_NEMO_NAMESPACE.svc.cluster.local:8000"
             - name: INFERENCE_MODEL
               value: "meta/llama-3.2-1b-instruct"
             - name: SAFETY_MODEL
