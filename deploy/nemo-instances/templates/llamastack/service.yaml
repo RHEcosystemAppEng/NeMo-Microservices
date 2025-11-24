@@ -1,0 +1,21 @@
+{{- if .Values.llamastack.enabled }}
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: {{ .Values.llamastack.name }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    "app.kubernetes.io/name": "nemo-llamastack"
+    "app.kubernetes.io/instance": "nemo-llamastack"
+spec:
+  ports:
+    - protocol: TCP
+      port: {{ .Values.llamastack.port }}
+      targetPort: {{ .Values.llamastack.port }}
+  type: ClusterIP
+  selector:
+    app: nemo-llamastack
+    "app.kubernetes.io/name": "nemo-llamastack"
+    "app.kubernetes.io/instance": "nemo-llamastack"
+{{- end }}

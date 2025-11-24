@@ -43,6 +43,7 @@ if RUN_LOCALLY:
     GUARDRAILS_URL = "http://localhost:8005"  # Guardrails (optional)
     NIM_CHAT_URL = "http://localhost:8006"  # Chat NIM
     NIM_EMBEDDING_URL = "http://localhost:8007"  # Embedding NIM (nv-embedqa-1b-v2)
+    LLAMASTACK_URL = "http://localhost:8321"  # LlamaStack Server
 else:
     # Cluster-internal URLs (for running from within cluster)
     NDS_URL = f"http://nemodatastore-sample.{NMS_NAMESPACE}.svc.cluster.local:8000"
@@ -50,6 +51,7 @@ else:
     GUARDRAILS_URL = f"http://nemoguardrails-sample.{NMS_NAMESPACE}.svc.cluster.local:8000"
     NIM_CHAT_URL = f"http://meta-llama3-1b-instruct.{NMS_NAMESPACE}.svc.cluster.local:8000"
     NIM_EMBEDDING_URL = f"http://nv-embedqa-1b-v2.{NMS_NAMESPACE}.svc.cluster.local:8000"
+    LLAMASTACK_URL = f"http://llamastack.{NMS_NAMESPACE}.svc.cluster.local:8321"  # LlamaStack Server
 
 # Cluster-internal NIM URLs (always use cluster service names)
 # These are used for operations that run inside the cluster

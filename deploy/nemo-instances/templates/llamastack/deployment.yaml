@@ -1,0 +1,90 @@
+{{- if .Values.llamastack.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    "app.kubernetes.io/name": "nemo-llamastack"
+    "app.kubernetes.io/instance": "nemo-llamastack"
+  annotations:
+    "openshift.io/scc": "nonroot"
+  name: {{ .Values.llamastack.name }}
+  namespace: {{ .Values.namespace.name }}
+spec:
+  replicas: {{ .Values.llamastack.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: {{ .Values.llamastack.strategy.rollingUpdate.maxUnavailable }}
+      maxSurge: {{ .Values.llamastack.strategy.rollingUpdate.maxSurge }}
+  selector:
+    matchLabels:
+      "app": "nemo-llamastack"
+      "app.kubernetes.io/name": "nemo-llamastack"
+      "app.kubernetes.io/instance": "nemo-llamastack"
+  template:
+    metadata:
+      labels:
+        "app": "nemo-llamastack"
+        "app.kubernetes.io/name": "nemo-llamastack"
+        "app.kubernetes.io/instance": "nemo-llamastack"
+      annotations:
+        "openshift.io/scc": "nonroot"
+    spec:
+      containers:
+        - name: llamastack-ctr
+          image: {{ .Values.llamastack.image.repository }}:{{ .Values.llamastack.image.tag }}
+          imagePullPolicy: {{ .Values.llamastack.image.pullPolicy }}
+          command: ["llama", "stack", "run"]
+          args:
+            - "/app/my-run.yaml"
+            - "--port"
+            - "$(LLAMA_STACK_PORT)"
+          volumeMounts:
+            - name: run-config
+              mountPath: /app/my-run.yaml
+              subPath: run.yaml
+          env:
+            - name: NVIDIA_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.llamastack.ngcAPISecret.name }}
+                  key: {{ .Values.llamastack.ngcAPISecret.key }}
+            - name: NVIDIA_BASE_URL
+              value: "http://{{ .Values.nimPipeline.serviceName }}.{{ .Values.namespace.name }}.svc.cluster.local:8000"
+            - name: NVIDIA_DATASETS_URL
+              value: "http://{{ .Values.datastore.name }}.{{ .Values.namespace.name }}.svc.cluster.local:8000"
+            - name: NVIDIA_DATASET_NAMESPACE
+              value: {{ .Values.llamastack.datasetNamespace | quote }}
+            - name: NVIDIA_PROJECT_ID
+              value: {{ .Values.llamastack.projectId | quote }}
+            - name: NVIDIA_CUSTOMIZER_URL
+              value: "http://{{ .Values.customizer.name }}.{{ .Values.namespace.name }}.svc.cluster.local:8000"
+            - name: GUARDRAILS_SERVICE_URL
+              value: "http://{{ .Values.guardrail.name }}.{{ .Values.namespace.name }}.svc.cluster.local:8000"
+            - name: NVIDIA_GUARDRAILS_CONFIG_ID
+              value: {{ .Values.llamastack.guardrailsConfigId | quote }}
+            - name: NVIDIA_EVALUATOR_URL
+              value: "http://{{ .Values.evaluator.name }}.{{ .Values.namespace.name }}.svc.cluster.local:8000"
+            - name: INFERENCE_MODEL
+              value: {{ .Values.llamastack.inferenceModel | quote }}
+            - name: SAFETY_MODEL
+              value: {{ .Values.llamastack.safetyModel | quote }}
+            - name: LLAMA_STACK_PORT
+              value: {{ .Values.llamastack.port | quote }}
+            - name: NVIDIA_OUTPUT_MODEL_DIR
+              value: {{ .Values.llamastack.outputModelDir | quote }}
+            - name: NVIDIA_ENTITY_STORE_URL
+              value: "http://{{ .Values.entitystore.name }}.{{ .Values.namespace.name }}.svc.cluster.local:8000"
+          ports:
+            - containerPort: {{ .Values.llamastack.port }}
+              protocol: TCP
+          resources:
+{{- toYaml .Values.llamastack.resources | nindent 12 }}
+      volumes:
+        - name: run-config
+          configMap:
+            name: {{ .Values.llamastack.configMapName }}
+      imagePullSecrets:
+        - name: {{ .Values.llamastack.pullSecret }}
+{{- end }}

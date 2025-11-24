@@ -30,87 +30,40 @@ Before deploying LlamaStack, ensure you have:
 
 ## Deployment
 
-### Automated Deployment
+LlamaStack is deployed using the Helm chart as part of the `nemo-instances` chart. This ensures consistency with the deployment approach used for all other NeMo microservices.
 
-Use the provided deployment script to deploy LlamaStack to your Kubernetes/OpenShift cluster:
+### Helm Deployment
 
-```bash
-cd demos/llamastack/deploy
-
-# Deploy with your NeMo namespace (required)
-NEMO_NAMESPACE=your-nemo-namespace ./deploy_llamastack.sh
-
-# Or deploy to specific namespace with your NeMo namespace
-NAMESPACE=your-llamastack-namespace NEMO_NAMESPACE=your-nemo-namespace ./deploy_llamastack.sh
-```
-
-### Understanding the Namespace Variables
-
-- **`NEMO_NAMESPACE`** (Required): The Kubernetes namespace where your NeMo microservices are running (Data Store, Entity Store, Customizer, Evaluator, Guardrails, NIM)
-- **`NAMESPACE`** (Optional): The Kubernetes namespace where LlamaStack components will be deployed. Defaults to `default` if not specified.
-
-**Example Scenario:**
-```bash
-# If NeMo services are in "production-nemo" namespace
-# And you want LlamaStack in "development-ai" namespace
-NAMESPACE=development-ai NEMO_NAMESPACE=production-nemo ./deploy_llamastack.sh
-```
-
-This allows you to run LlamaStack in different environments while connecting to the same NeMo backend services.
-
-This script will:
-
-1. **Apply Kubernetes Resources**:
-   - `configmap.yaml`: Contains the LlamaStack configuration defining providers for various APIs (inference, safety, eval, post_training, etc.)
-   - `deployment.yaml`: Deploys the LlamaStack container with environment variables pointing to your NeMo microservices
-   - `service.yaml`: Creates a ClusterIP service to expose LlamaStack internally on port 8321
-
-2. **Wait for Deployment**: The script waits up to 300 seconds for the deployment to become available
-
-3. **Verify Deployment**: Shows the running LlamaStack pods
-
-The deployment configures LlamaStack with the NVIDIA provider integration, connecting it to your NeMo microservices infrastructure.
-
-### Namespace Considerations
-
-- **Service Components** (ConfigMap, Deployment, Service): Should be deployed in the same namespace as your NeMo microservices
-- **Route** (Optional): May need to be deployed in a different namespace for external access, depending on your cluster configuration
-- **Environment Variables**: Update the URLs in `deployment.yaml` to match your actual NeMo microservice endpoints and namespaces
-
-### Manual Deployment
-
-If you prefer manual deployment, specify your target namespace:
+LlamaStack is included in the `nemo-instances` Helm chart. To deploy or upgrade:
 
 ```bash
-# Set your target namespace
-NAMESPACE=your-namespace
+cd deploy/nemo-instances
 
-# Apply configuration resources
-oc apply -f configmap.yaml -n $NAMESPACE
-oc apply -f service.yaml -n $NAMESPACE
-oc apply -f deployment.yaml -n $NAMESPACE
-
-# Wait for deployment to be ready
-oc wait --for=condition=available deployment/llamastack --timeout=300s -n $NAMESPACE
-
-# Optional: Create external route in the same or different namespace
-# Note: Route may need to be deployed in a different namespace for external access
-oc apply -f route.yaml -n $NAMESPACE
+# Deploy or upgrade with llamastack enabled
+helm upgrade nemo-instances . \
+  -n <namespace> \
+  --set namespace.name=<namespace> \
+  --set llamastack.enabled=true
 ```
+
+The Helm chart will create:
+- **ConfigMap**: Contains the LlamaStack configuration defining providers for various APIs (inference, safety, eval, post_training, etc.)
+- **Deployment**: Deploys the LlamaStack container with environment variables pointing to your NeMo microservices
+- **Service**: Creates a ClusterIP service to expose LlamaStack internally on port 8321
 
 ### Configuration
 
-**IMPORTANT**: You must specify your NeMo namespace when deploying. The deployment script will automatically update all service URLs to use your specified namespace.
-
-The deployment uses several environment variables configured in `deployment.yaml`:
+The deployment is configured via Helm values in `deploy/nemo-instances/values.yaml`. Key configuration includes:
 
 - `NVIDIA_API_KEY`: Your NGC API key (from secret)
-- `NVIDIA_BASE_URL`: NIM inference endpoint URL
-- `NVIDIA_ENTITY_STORE_URL`: NeMo Entity Store URL
-- `NVIDIA_DATASETS_URL`: NeMo Data Store URL
-- `NVIDIA_CUSTOMIZER_URL`: NeMo Customizer URL
-- `GUARDRAILS_SERVICE_URL`: NeMo Guardrails URL
-- `NVIDIA_EVALUATOR_URL`: NeMo Evaluator URL
+- `NVIDIA_BASE_URL`: NIM inference endpoint URL (automatically configured based on namespace)
+- `NVIDIA_ENTITY_STORE_URL`: NeMo Entity Store URL (automatically configured)
+- `NVIDIA_DATASETS_URL`: NeMo Data Store URL (automatically configured)
+- `NVIDIA_CUSTOMIZER_URL`: NeMo Customizer URL (automatically configured)
+- `GUARDRAILS_SERVICE_URL`: NeMo Guardrails URL (automatically configured)
+- `NVIDIA_EVALUATOR_URL`: NeMo Evaluator URL (automatically configured)
+
+All service URLs are automatically configured based on the namespace setting, ensuring proper connectivity to NeMo microservices.
 
 ## End-to-End Test
 
@@ -171,14 +124,17 @@ The notebook exercises these LlamaStack APIs:
 
 ## Usage
 
-After deployment, LlamaStack will be available at `http://llamastack:8321` (internal) or via the configured route (external).
+After deployment, LlamaStack will be available at:
+- **Internal**: `http://llamastack.<namespace>.svc.cluster.local:8321`
+- **From within the same namespace**: `http://llamastack:8321`
 
 You can interact with LlamaStack using:
 
 ```python
 from llama_stack_client import LlamaStackClient
 
-client = LlamaStackClient(base_url="http://localhost:8321")
+# Update the URL to match your deployment
+client = LlamaStackClient(base_url="http://llamastack.<namespace>.svc.cluster.local:8321")
 # Run inference, evaluations, safety checks, etc.
 ```
 

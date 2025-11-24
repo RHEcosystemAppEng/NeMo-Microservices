@@ -3,4 +3,7 @@ jupyterlab>=4.4.1
 python-dotenv>=1.0.0
 numpy>=1.24.0
 pandas>=2.0.0
+# llama-stack-client>=0.4.0
+# Note: Server runs 0.4.0.dev0 (dev version), install with: pip install --upgrade --pre "llama-stack-client>=0.4.0"
+llama-stack-client>=0.4.0
 

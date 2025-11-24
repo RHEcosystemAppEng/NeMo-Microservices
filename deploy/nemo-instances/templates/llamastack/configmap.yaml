@@ -1,0 +1,18 @@
+{{- if .Values.llamastack.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.llamastack.configMapName }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    "app.kubernetes.io/name": "nemo-llamastack"
+    "app.kubernetes.io/instance": "nemo-llamastack"
+data:
+  run.yaml: |
+{{- include "llamastack.config.base" . | nindent 4 }}
+{{- include "llamastack.config.providers" . | nindent 4 }}
+{{- include "llamastack.config.storage" . | nindent 4 }}
+{{- include "llamastack.config.models" . | nindent 4 }}
+{{- include "llamastack.config.server" . | nindent 4 }}
+{{- end }}

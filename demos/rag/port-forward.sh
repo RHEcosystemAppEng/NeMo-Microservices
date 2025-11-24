@@ -22,6 +22,7 @@ cleanup() {
     pkill -f "oc port-forward.*nemoguardrails" 2>/dev/null
     pkill -f "oc port-forward.*meta-llama3" 2>/dev/null
     pkill -f "oc port-forward.*nv-embedqa" 2>/dev/null
+    pkill -f "oc port-forward.*llamastack" 2>/dev/null
     echo "✅ All port-forwards stopped"
     exit 0
 }
@@ -80,6 +81,7 @@ pkill -f "oc port-forward.*nemoentitystore" 2>/dev/null
 pkill -f "oc port-forward.*nemoguardrails" 2>/dev/null
 pkill -f "oc port-forward.*meta-llama3" 2>/dev/null
 pkill -f "oc port-forward.*nv-embedqa" 2>/dev/null
+pkill -f "oc port-forward.*llamastack" 2>/dev/null
 sleep 1
 
 # Initialize PID file
@@ -96,7 +98,18 @@ start_port_forward 8001 "nemodatastore-sample" "Data Store"
 start_port_forward 8002 "nemoentitystore-sample" "Entity Store"
 start_port_forward 8005 "nemoguardrails-sample" "Guardrails"
 start_port_forward 8006 "meta-llama3-1b-instruct" "Chat NIM"
-start_port_forward 8007 "nv-embedqa-e5-v5" "Embedding NIM"
+start_port_forward 8007 "nv-embedqa-1b-v2" "Embedding NIM"
+# LlamaStack uses port 8321, not 8000
+echo "📡 Starting port-forward for LlamaStack (port 8321)..."
+oc port-forward -n $NAMESPACE svc/llamastack 8321:8321 >> "$LOG_FILE" 2>&1 &
+LLAMASTACK_PID=$!
+echo $LLAMASTACK_PID >> "$PID_FILE"
+sleep 1
+if kill -0 $LLAMASTACK_PID 2>/dev/null; then
+    echo "✅ LlamaStack port-forward started (PID: $LLAMASTACK_PID)"
+else
+    echo "❌ Failed to start port-forward for LlamaStack"
+fi
 
 echo ""
 echo "✅ All port-forwards started"

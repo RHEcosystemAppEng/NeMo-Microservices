@@ -324,6 +324,42 @@ nimPipelineEmbedding:
       operator: "Exists"
       effect: "NoSchedule"
 
+# ===== LlamaStack Configuration =====
+# LlamaStack provides a unified abstraction layer over NeMo Microservices
+# Image: quay.io/hacohen/distribution-nvidia:v0.3.0
+llamastack:
+  enabled: true
+  name: llamastack
+  configMapName: llamastack-config
+  image:
+    repository: quay.io/hacohen/distribution-nvidia
+    tag: "v0.3.0"
+    pullPolicy: Always
+  pullSecret: ngc-secret
+  ngcAPISecret:
+    name: ngc-api-secret
+    key: "NGC_API_KEY"
+  replicas: 1
+  port: 8321
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 0
+  # LlamaStack configuration
+  datasetNamespace: "nvidia-e2e-tutorial"
+  projectId: "llamastack-project"
+  guardrailsConfigId: "demo-self-check-input-output"
+  inferenceModel: "meta/llama-3.2-1b-instruct"
+  safetyModel: "meta/llama-3.2-1b-instruct"
+  outputModelDir: "nvidia-e2e-tutorial/test-messages-model@v1"
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1"
+
 # ===== NeMo Operator Subchart =====
 nemo-operator:
   # NeMo Operator chart configuration
