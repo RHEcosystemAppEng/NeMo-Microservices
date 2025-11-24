@@ -22,7 +22,5 @@ oc apply -f service.yaml -n $NAMESPACE
 oc apply -f deployment.yaml -n $NAMESPACE
 oc wait --for=condition=available deployment/llamastack --timeout=300s -n $NAMESPACE
 sleep 3s
-# oc apply -f route.yaml -n $NAMESPACE
 
 oc get pods -n $NAMESPACE | grep llamastack
-# oc get route -n $NAMESPACE | grep llamastack
