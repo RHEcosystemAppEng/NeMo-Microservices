@@ -21,6 +21,7 @@ The workflow:
 - ✅ NeMo Evaluator (v25.06+)
 - ✅ NeMo Data Store
 - ✅ NeMo Entity Store
+- ✅ LlamaStack (optional but recommended)
 
 ### API Keys (Optional - Not Required)
 - **No API Key Required**: This tutorial uses your deployed NIM endpoint (`meta-llama3-1b-instruct` service) for both judge and target models
@@ -80,6 +81,7 @@ Or manually:
 oc port-forward -n anemo-rhoai svc/nemodatastore-sample 8001:8000 &
 oc port-forward -n anemo-rhoai svc/nemoentitystore-sample 8002:8000 &
 oc port-forward -n anemo-rhoai svc/nemoevaluator-sample 8004:8000 &
+oc port-forward -n anemo-rhoai svc/llamastack 8321:8321 &
 ```
 
 ### 4. Run the Notebook
@@ -101,11 +103,13 @@ The notebook uses `config.py` which automatically:
 - Data Store: `http://nemodatastore-sample.{namespace}.svc.cluster.local:8000`
 - Entity Store: `http://nemoentitystore-sample.{namespace}.svc.cluster.local:8000`
 - Evaluator: `http://nemoevaluator-sample.{namespace}.svc.cluster.local:8000`
+- LlamaStack: `http://llamastack.{namespace}.svc.cluster.local:8321`
 
 **Local Mode** (with port-forwards):
 - Data Store: `http://localhost:8001`
 - Entity Store: `http://localhost:8002`
 - Evaluator: `http://localhost:8004`
+- LlamaStack: `http://localhost:8321`
 
 ## Customization
 
@@ -221,6 +225,24 @@ If you must use a Knative InferenceService, you have these options:
 
 - [NeMo Evaluator Custom Evaluation](https://docs.nvidia.com/nemo/microservices/latest/evaluate/evaluation-custom.html#evaluation-with-llm-as-a-judge)
 - [Evaluation Targets](https://docs.nvidia.com/nemo/microservices/latest/evaluate/evaluation-targets.html)
+
+## LlamaStack Integration
+
+This demo includes LlamaStack integration for a unified API experience. The notebook:
+
+- ✅ Initializes LlamaStack client on startup
+- ✅ Tests connectivity to LlamaStack service
+- ✅ Provides graceful fallback if LlamaStack is unavailable
+
+**Note**: While the evaluation jobs themselves use the Evaluator service (which calls models directly), LlamaStack is available for any future enhancements or direct model interactions.
+
+### LlamaStack Service
+
+- **Port**: 8321
+- **Service Name**: `llamastack`
+- **Client**: `llama-stack-client` (installed from GitHub main branch)
+
+The notebook automatically detects if LlamaStack is available and initializes the client accordingly.
 
 ## Files
 

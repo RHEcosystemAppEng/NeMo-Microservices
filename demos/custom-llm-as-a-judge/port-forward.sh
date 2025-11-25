@@ -44,13 +44,19 @@ if check_port 8006; then
     PF6_PID=$!
 fi
 
+if check_port 8321; then
+    echo "📡 Port-forwarding LlamaStack (8321)..."
+    oc port-forward -n $NAMESPACE svc/llamastack 8321:8321 > /dev/null 2>&1 &
+    PF_LLAMASTACK_PID=$!
+fi
+
 echo ""
-echo "✅ Port-forwards started. PIDs: $PF1_PID $PF2_PID $PF4_PID $PF6_PID"
-echo "To stop, run: kill $PF1_PID $PF2_PID $PF4_PID $PF6_PID"
+echo "✅ Port-forwards started. PIDs: $PF1_PID $PF2_PID $PF4_PID $PF6_PID $PF_LLAMASTACK_PID"
+echo "To stop, run: kill $PF1_PID $PF2_PID $PF4_PID $PF6_PID $PF_LLAMASTACK_PID"
 echo ""
 echo "Waiting... (Press Ctrl+C to stop)"
 
 # Wait for interrupt
-trap "echo ''; echo 'Stopping port-forwards...'; kill $PF1_PID $PF2_PID $PF4_PID $PF6_PID 2>/dev/null; exit" INT
+trap "echo ''; echo 'Stopping port-forwards...'; kill $PF1_PID $PF2_PID $PF4_PID $PF6_PID $PF_LLAMASTACK_PID 2>/dev/null; exit" INT
 wait
 
