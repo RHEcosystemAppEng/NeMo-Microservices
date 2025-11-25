@@ -32,6 +32,32 @@ Before deploying LlamaStack, ensure you have:
 
 LlamaStack is deployed using the Helm chart as part of the `nemo-instances` chart. This ensures consistency with the deployment approach used for all other NeMo microservices.
 
+### Building the Image
+
+The LlamaStack container image used in the deployment can be built using the following commands:
+
+```bash
+git clone https://github.com/meta-llama/llama-stack.git
+cd llama-stack
+
+podman build --platform=linux/amd64 \
+  -f containers/Containerfile \
+  --build-arg DISTRO_NAME=nvidia \
+  --build-arg INSTALL_MODE=editable \
+  --tag quay.io/hacohen/distribution-nvidia:v0.3.0 .
+
+podman push quay.io/hacohen/distribution-nvidia:v0.3.0
+```
+
+The image configuration in the Helm values (`deploy/nemo-instances/values.yaml`) references this image:
+
+```yaml
+llamastack:
+  image:
+    repository: quay.io/hacohen/distribution-nvidia
+    tag: "v0.3.0"
+```
+
 ### Helm Deployment
 
 LlamaStack is included in the `nemo-instances` Helm chart. To deploy or upgrade:
