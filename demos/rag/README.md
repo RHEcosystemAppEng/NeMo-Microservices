@@ -9,7 +9,7 @@ This example implements a complete RAG workflow:
 2. **Embedding Generation**: Create embeddings using NeMo Embedding NIM
 3. **Vector Storage**: Store embeddings in NeMo Entity Store
 4. **Query Processing**: Retrieve relevant documents based on user queries
-5. **Response Generation**: Generate answers using NeMo Chat NIM with retrieved context
+5. **Response Generation**: Generate answers using **LlamaStack client** (with fallback to direct Chat NIM) with retrieved context
 6. **Optional Guardrails**: Apply safety guardrails to responses
 
 ## Prerequisites
@@ -18,12 +18,14 @@ This example implements a complete RAG workflow:
 - ✅ NeMo Data Store (v25.08+)
 - ✅ NeMo Entity Store (v25.08+)
 - ✅ NeMo Guardrails (v25.08+) - Optional but recommended
+- ✅ **LlamaStack Server** - Unified API abstraction layer (deployed via Helm)
 - ✅ Chat NIM: `meta-llama3-1b-instruct` service
-- ✅ Embedding NIM: `nv-embedqa-e5-v5` service
+- ✅ Embedding NIM: `nv-embedqa-1b-v2` service
 
 ### Python Environment
 - Python 3.8+
 - Jupyter Lab
+- `llama-stack-client` (installed automatically in notebook)
 
 ## Quick Start
 
@@ -109,7 +111,10 @@ oc port-forward -n anemo-rhoai svc/nemoguardrails-sample 8005:8000
 oc port-forward -n anemo-rhoai svc/meta-llama3-1b-instruct 8006:8000
 
 # Terminal 5
-oc port-forward -n anemo-rhoai svc/nv-embedqa-e5-v5 8007:8000
+oc port-forward -n anemo-rhoai svc/nv-embedqa-1b-v2 8007:8000
+
+# Terminal 6 (for LlamaStack)
+oc port-forward -n anemo-rhoai svc/llamastack 8321:8321
 ```
 
 4. **Run the Notebook**
@@ -132,7 +137,8 @@ The notebook uses `config.py` which automatically:
 - Entity Store: `http://nemoentitystore-sample.{namespace}.svc.cluster.local:8000`
 - Guardrails: `http://nemoguardrails-sample.{namespace}.svc.cluster.local:8000`
 - Chat NIM: `http://meta-llama3-1b-instruct.{namespace}.svc.cluster.local:8000`
-- Embedding NIM: `http://nv-embedqa-e5-v5.{namespace}.svc.cluster.local:8000`
+- Embedding NIM: `http://nv-embedqa-1b-v2.{namespace}.svc.cluster.local:8000`
+- LlamaStack: `http://llamastack.{namespace}.svc.cluster.local:8321`
 
 **Local Mode** (with port-forwards):
 - Data Store: `http://localhost:8001`
@@ -140,6 +146,7 @@ The notebook uses `config.py` which automatically:
 - Guardrails: `http://localhost:8005`
 - Chat NIM: `http://localhost:8006`
 - Embedding NIM: `http://localhost:8007`
+- LlamaStack: `http://localhost:8321`
 
 ## RAG Workflow
 
@@ -148,7 +155,7 @@ The notebook uses `config.py` which automatically:
 - Documents are stored in a namespace for organization
 
 ### 2. Embedding Generation
-- Use NeMo Embedding NIM (`nv-embedqa-e5-v5`) to generate embeddings
+- Use NeMo Embedding NIM (`nv-embedqa-1b-v2`) to generate embeddings
 - Each document chunk is converted to a vector representation
 
 ### 3. Vector Storage
@@ -162,7 +169,7 @@ The notebook uses `config.py` which automatically:
 
 ### 5. Response Generation
 - Retrieved documents are used as context
-- Chat NIM generates a response based on query + context
+- **LlamaStack client** generates a response using chat completions API (with fallback to direct NIM)
 - Optional: Guardrails validate response safety
 
 ## Customization
@@ -179,7 +186,7 @@ RAG_SIMILARITY_THRESHOLD = 0.3  # Minimum similarity score
 
 The notebook uses:
 - **Chat Model**: `meta-llama3-1b-instruct` (via NIM service)
-- **Embedding Model**: `nv-embedqa-e5-v5` (via NIM service)
+- **Embedding Model**: `nv-embedqa-1b-v2` (via NIM service)
 
 To use different models, update the service names in `config.py`.
 
@@ -229,13 +236,28 @@ Port-forwards can be inconsistent because:
 - **NeMo Entity Store**: v25.08+
 - **NeMo Guardrails**: v25.08+
 - **Chat NIM**: meta/llama-3.2-1b-instruct:1.8.3
-- **Embedding NIM**: nvidia/nv-embedqa-e5-v5:1.0.1
+- **Embedding NIM**: nvidia/llama-3.2-nv-embedqa-1b-v2 (via NIM service)
+
+## LlamaStack Integration
+
+This demo uses **LlamaStack** for chat completions, providing a unified API abstraction layer over NeMo microservices. The integration:
+
+- **Uses LlamaStack client** for chat completions (with automatic fallback to direct NIM if LlamaStack is unavailable)
+- **Uses direct NIM calls** for embeddings (as LlamaStack may not expose embeddings API directly)
+- **Maintains backward compatibility** - works even if LlamaStack service is not deployed
+
+### LlamaStack Benefits
+
+- **Type safety**: Pydantic models instead of raw JSON
+- **Unified API**: Single client for multiple NeMo services
+- **Better error handling**: Typed exceptions
+- **Simplified code**: Less boilerplate than direct REST calls
 
 ## Files
 
 - `rag-tutorial.ipynb` - Main tutorial notebook
-- `config.py` - Configuration file (auto-detects local vs cluster)
-- `requirements.txt` - Python dependencies
+- `config.py` - Configuration file (auto-detects local vs cluster, includes LlamaStack URL)
+- `requirements.txt` - Python dependencies (includes llama-stack-client)
 - `port-forward.sh` - Port-forward script for local development
 
 ## Documentation
