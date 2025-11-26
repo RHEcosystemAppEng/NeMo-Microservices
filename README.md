@@ -1,4 +1,4 @@
-# NVIDIA NeMo Microservices on OpenShift
+# NVIDIA NeMo Microservices on OpenShift AI
 
 Helm charts for deploying NVIDIA NeMo microservices infrastructure and demos on OpenShift.
 
