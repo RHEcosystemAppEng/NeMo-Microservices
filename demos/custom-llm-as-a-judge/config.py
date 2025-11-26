@@ -39,6 +39,7 @@ if RUN_LOCALLY:
     ENTITY_STORE_URL = "http://localhost:8002"  # Entity Store
     EVALUATOR_URL = "http://localhost:8004"  # Evaluator
     NIM_URL = "http://localhost:8006"  # NIM (optional, for target model)
+    LLAMASTACK_URL = "http://localhost:8321"  # LlamaStack Server
 else:
     # Cluster-internal URLs (for running from within cluster)
     NDS_URL = f"http://nemodatastore-sample.{NMS_NAMESPACE}.svc.cluster.local:8000"
@@ -46,6 +47,7 @@ else:
     EVALUATOR_URL = f"http://nemoevaluator-sample.{NMS_NAMESPACE}.svc.cluster.local:8000"
     # External NIM service (if using external NIM - not recommended, use STANDARD_NIM_SERVICE instead)
     NIM_URL = f"http://{EXTERNAL_NIM_SERVICE}.{EXTERNAL_NIM_NAMESPACE}.svc.cluster.local:{EXTERNAL_NIM_PORT}"
+    LLAMASTACK_URL = f"http://llamastack.{NMS_NAMESPACE}.svc.cluster.local:8321"  # LlamaStack Server
 
 # For evaluation jobs, use NEMO_URL which points to Evaluator
 # The notebook uses NEMO_URL for Evaluator endpoints
