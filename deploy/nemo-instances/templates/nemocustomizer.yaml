@@ -9,6 +9,8 @@ spec:
   scheduler:
     type: "{{ .Values.customizer.scheduler.type }}"
   # Weights & Biases configuration for experiment tracking
+  # Note: CRD requires wandb section, so it's always included
+  # The secret is created with empty values by default (wandb is optional functionality)
   wandb:
     secretName: {{ .Values.customizer.wandb.secretName }}
     apiKeyKey: {{ .Values.customizer.wandb.apiKeyKey }}

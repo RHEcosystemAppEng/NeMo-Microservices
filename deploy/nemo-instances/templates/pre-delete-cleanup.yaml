@@ -1,0 +1,262 @@
+# Pre-delete hook to clean up Custom Resources before Helm uninstall
+# This ensures operators stop managing resources and pods are terminated
+# This hook runs automatically when you run: helm uninstall nemo-instances
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nemo-instances-pre-delete-cleanup
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    component: cleanup
+    app.kubernetes.io/name: nemo-instances
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  activeDeadlineSeconds: 300
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        component: cleanup
+    spec:
+      serviceAccountName: nemo-instances-cleanup
+      restartPolicy: Never
+      containers:
+      - name: cleanup
+        image: registry.redhat.io/openshift4/ose-cli:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          NAMESPACE="{{ .Values.namespace.name }}"
+          
+          echo "🧹 Pre-delete cleanup: Deleting Custom Resources in namespace: $NAMESPACE"
+          
+          # Function to remove finalizers from a resource
+          remove_finalizers() {
+            local KIND=$1
+            local NAME=$2
+            echo "🔧 Removing finalizers from $KIND/$NAME..."
+            oc patch "$KIND" "$NAME" -n "$NAMESPACE" -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
+          }
+          
+          # Function to delete CRs and handle finalizers
+          delete_crs_with_finalizer_handling() {
+            local RESOURCES=$1
+            local RESOURCE_TYPE=$2
+            
+            echo "📋 Deleting $RESOURCE_TYPE Custom Resources..."
+            oc delete $RESOURCES --all -n "$NAMESPACE" --ignore-not-found=true --wait=false || true
+            
+            # Wait a bit for deletion to process
+            sleep 5
+            
+            # Check for stuck resources with finalizers and remove them
+            echo "🔍 Checking for resources blocked by finalizers..."
+            for RESOURCE in $RESOURCES; do
+              # Get all resources of this type
+              RESOURCE_LIST=$(oc get $RESOURCE -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+              if [ -n "$RESOURCE_LIST" ]; then
+                for NAME in $RESOURCE_LIST; do
+                  # Check if resource has finalizers
+                  FINALIZERS=$(oc get $RESOURCE "$NAME" -n "$NAMESPACE" -o jsonpath='{.metadata.finalizers[*]}' 2>/dev/null || echo "")
+                  if [ -n "$FINALIZERS" ]; then
+                    echo "⚠️  $RESOURCE/$NAME has finalizers: $FINALIZERS"
+                    remove_finalizers "$RESOURCE" "$NAME"
+                  fi
+                done
+              fi
+            done
+          }
+          
+          # Delete NeMo Custom Resources
+          delete_crs_with_finalizer_handling "nemocustomizer,nemodatastore,nemoentitystore,nemoevaluator,nemoguardrail" "NeMo"
+          
+          # Delete NIM Custom Resources
+          delete_crs_with_finalizer_handling "nimcache,nimpipeline" "NIM"
+          
+          # Wait for CRs to be deleted (with timeout)
+          echo "⏳ Waiting for Custom Resources to be deleted..."
+          sleep 10
+          
+          # Poll for CR deletion (max 2 minutes)
+          MAX_WAIT=120
+          ELAPSED=0
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            CR_COUNT=$(oc get nemocustomizer,nemodatastore,nemoentitystore,nemoevaluator,nemoguardrail,nimcache,nimpipeline -n "$NAMESPACE" 2>/dev/null | tail -n +2 | wc -l || echo "0")
+            if [ "$CR_COUNT" -eq 0 ]; then
+              echo "✅ All Custom Resources deleted"
+              break
+            fi
+            echo "⏳ Still waiting for $CR_COUNT Custom Resource(s) to be deleted..."
+            
+            # If still stuck after 30 seconds, try removing finalizers again
+            if [ $ELAPSED -ge 30 ]; then
+              echo "🔧 Attempting to remove finalizers from remaining resources..."
+              for RESOURCE in nemocustomizer nemodatastore nemoentitystore nemoevaluator nemoguardrail nimcache nimpipeline; do
+                RESOURCE_LIST=$(oc get $RESOURCE -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+                for NAME in $RESOURCE_LIST; do
+                  remove_finalizers "$RESOURCE" "$NAME"
+                done
+              done
+            fi
+            
+            sleep 5
+            ELAPSED=$((ELAPSED + 5))
+          done
+          
+          # Final check: Force remove finalizers from any remaining resources
+          echo "🔍 Final check for remaining resources with finalizers..."
+          for RESOURCE in nemocustomizer nemodatastore nemoentitystore nemoevaluator nemoguardrail nimcache nimpipeline; do
+            RESOURCE_LIST=$(oc get $RESOURCE -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+            for NAME in $RESOURCE_LIST; do
+              echo "⚠️  Force removing finalizers from $RESOURCE/$NAME..."
+              remove_finalizers "$RESOURCE" "$NAME"
+            done
+          done
+          
+          # Wait for pods to terminate (with timeout)
+          echo "⏳ Waiting for pods to terminate..."
+          oc wait --for=delete pod --all -n "$NAMESPACE" --timeout=120s || echo "⚠️  Some pods may still be terminating (this is OK)"
+          
+          # Clean up cluster-scoped resources that might block Helm uninstall
+          echo "🧹 Cleaning up cluster-scoped resources..."
+          
+          # Delete ClusterRoles and ClusterRoleBindings (excluding cleanup job's own RBAC)
+          echo "📋 Deleting ClusterRoles..."
+          CLUSTER_ROLES=$(oc get clusterrole -l app.kubernetes.io/instance=nemo-instances -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$CLUSTER_ROLES" ]; then
+            for CR in $CLUSTER_ROLES; do
+              # Skip cleanup job's own ClusterRole
+              if [ "$CR" != "nemo-instances-cleanup-cluster" ]; then
+                echo "  - $CR"
+                oc delete clusterrole "$CR" --ignore-not-found=true || true
+              fi
+            done
+          fi
+          
+          echo "📋 Deleting ClusterRoleBindings..."
+          CLUSTER_ROLE_BINDINGS=$(oc get clusterrolebinding -l app.kubernetes.io/instance=nemo-instances -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$CLUSTER_ROLE_BINDINGS" ]; then
+            for CRB in $CLUSTER_ROLE_BINDINGS; do
+              # Skip cleanup job's own ClusterRoleBinding
+              if [ "$CRB" != "nemo-instances-cleanup-cluster" ]; then
+                echo "  - $CRB"
+                oc delete clusterrolebinding "$CRB" --ignore-not-found=true || true
+              fi
+            done
+          fi
+          
+          # Delete any other cluster-scoped resources with the instance label
+          echo "📋 Checking for other cluster-scoped resources..."
+          oc delete validatingwebhookconfigurations,mutatingwebhookconfigurations -l app.kubernetes.io/instance=nemo-instances --ignore-not-found=true 2>/dev/null || true
+          
+          # Clean up namespace-scoped resources that might block Helm
+          echo "🧹 Cleaning up remaining namespace-scoped resources..."
+          
+          # Delete deployments, services, and other resources that might be stuck
+          oc delete deployment,service,replicaset -l app.kubernetes.io/instance=nemo-instances -n "$NAMESPACE" --ignore-not-found=true --wait=false 2>/dev/null || true
+          
+          # Check for and remove finalizers on deployments and other resources
+          echo "🔍 Checking for finalizers on Helm-managed resources..."
+          for RESOURCE in deployment service replicaset; do
+            RESOURCE_LIST=$(oc get $RESOURCE -l app.kubernetes.io/instance=nemo-instances -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+            for NAME in $RESOURCE_LIST; do
+              FINALIZERS=$(oc get $RESOURCE "$NAME" -n "$NAMESPACE" -o jsonpath='{.metadata.finalizers[*]}' 2>/dev/null || echo "")
+              if [ -n "$FINALIZERS" ]; then
+                echo "⚠️  $RESOURCE/$NAME has finalizers: $FINALIZERS"
+                oc patch $RESOURCE "$NAME" -n "$NAMESPACE" -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
+              fi
+            done
+          done
+          
+          # Wait a bit for resources to be deleted
+          sleep 5
+          
+          echo "✅ Pre-delete cleanup completed"
+---
+# ServiceAccount and RBAC for cleanup hook
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nemo-instances-cleanup
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    component: cleanup
+    app.kubernetes.io/name: nemo-instances
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: nemo-instances-cleanup
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    component: cleanup
+    app.kubernetes.io/name: nemo-instances
+rules:
+- apiGroups: ["apps.nvidia.com"]
+  resources: ["nemocustomizers", "nemodatastores", "nemoentitystores", "nemoevaluators", "nemoguardrails"]
+  verbs: ["get", "list", "delete", "patch"]
+- apiGroups: ["apps.nvidia.com"]
+  resources: ["nimcaches", "nimpipelines"]
+  verbs: ["get", "list", "delete", "patch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["deployments", "services", "replicasets"]
+  verbs: ["get", "list", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: nemo-instances-cleanup
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    component: cleanup
+    app.kubernetes.io/name: nemo-instances
+subjects:
+- kind: ServiceAccount
+  name: nemo-instances-cleanup
+  namespace: {{ .Values.namespace.name }}
+roleRef:
+  kind: Role
+  name: nemo-instances-cleanup
+  apiGroup: rbac.authorization.k8s.io
+---
+# ClusterRole for cluster-scoped resource cleanup
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nemo-instances-cleanup-cluster
+  labels:
+    component: cleanup
+    app.kubernetes.io/name: nemo-instances
+rules:
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["clusterroles", "clusterrolebindings"]
+  verbs: ["get", "list", "delete"]
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources: ["validatingwebhookconfigurations", "mutatingwebhookconfigurations"]
+  verbs: ["get", "list", "delete"]
+---
+# ClusterRoleBinding for cluster-scoped resource cleanup
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nemo-instances-cleanup-cluster
+  labels:
+    component: cleanup
+    app.kubernetes.io/name: nemo-instances
+subjects:
+- kind: ServiceAccount
+  name: nemo-instances-cleanup
+  namespace: {{ .Values.namespace.name }}
+roleRef:
+  kind: ClusterRole
+  name: nemo-instances-cleanup-cluster
+  apiGroup: rbac.authorization.k8s.io
+

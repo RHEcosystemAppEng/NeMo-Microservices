@@ -35,9 +35,17 @@ customizer:
   scheduler:
     type: "volcano"
   wandb:
+    # Note: CRD requires wandb section, so it's always included in the spec
+    # The secret is always created (with empty values by default)
+    # WandB functionality is optional - application should handle empty values gracefully
     secretName: wandb-secret
     apiKeyKey: apiKey
     encryptionKey: encryptionKey
+    # Values for wandb-secret (empty by default, wandb is optional)
+    # For production with WandB, override via --set flags:
+    # --set customizer.wandb.apiKey=<your-api-key> --set customizer.wandb.encryptionKeyValue=<your-encryption-key>
+    apiKey: ""
+    encryptionKeyValue: ""
   otel:
     enabled: true
     # exporterOtlpEndpoint will be templated in the template file

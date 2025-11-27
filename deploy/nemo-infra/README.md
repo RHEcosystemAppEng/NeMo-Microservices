@@ -67,73 +67,21 @@ This Helm chart deploys all infrastructure components required for NVIDIA NeMo m
 ### Archtecture Diagram
 ![Layers Architecture](../../images/Llamastack_NeMo_layers_architecture_diagram.png)
 
-## Quick Start
+## Installation
 
-### Installation
+📖 **Installation guide**: See [main README](../../README.md#installation) for complete installation instructions.
 
+**Quick reference:**
 ```bash
-# Navigate to chart directory
 cd deploy/nemo-infra
-
-# Update dependencies
 helm dependency update
-
-# Deploy all services
-helm install nemo-infra . \
-  -n <namespace> \
-  --create-namespace
+helm install nemo-infra . -n <namespace> --create-namespace
 ```
 
-### Upgrade
-
+**Verify installation:**
 ```bash
-# Upgrade existing deployment
-helm upgrade nemo-infra . \
-  -n <namespace>
-```
-
-### Verify Installation
-
-```bash
-# Check all pods are running
-oc get pods -n <namespace>
-
-# Check specific component
-oc get pods -n <namespace> | grep postgresql
-oc get pods -n <namespace> | grep volcano
-```
-
-<details>
-<summary><strong>Example: Verify All Infrastructure Components</strong></summary>
-
-To verify all infrastructure components are running, use the following command:
-
-```bash
-# Replace <namespace> with your actual namespace, e.g., arhkp-nemo-helm
 oc get pods -n <namespace> | grep -E "(postgresql|mlflow|volcano|argo|milvus|opentelemetry|jupyter|minio)"
 ```
-
-**Expected Output:**
-```
-jupyter-notebook-5fc745674d-9gq29                                1/1     Running     0          175m
-nemo-infra-argo-workflows-server-6ccf84f45d-rnvxg                1/1     Running     0          175m
-nemo-infra-argo-workflows-workflow-controller-68d456d755-hds5p   1/1     Running     0          175m
-nemo-infra-customizer-mlflow-tracking-6787ff598-fjmmr            1/1     Running     0          175m
-nemo-infra-customizer-opentelemetry-648455b458-zq8v6             1/1     Running     0          175m
-nemo-infra-customizer-postgresql-0                               1/1     Running     0          175m
-nemo-infra-datastore-postgresql-0                                1/1     Running     0          175m
-nemo-infra-entity-store-postgresql-0                             1/1     Running     0          175m
-nemo-infra-evaluator-milvus-standalone-86599fc78f-gkhhv          1/1     Running     0          175m
-nemo-infra-evaluator-opentelemetry-577d4d757-lnlcm               1/1     Running     0          175m
-nemo-infra-evaluator-postgresql-0                                1/1     Running     0          175m
-nemo-infra-guardrail-postgresql-0                                1/1     Running     0          175m
-nemo-infra-minio-89bdcdd79-s28km                                 1/1     Running     0          175m
-nemo-infra-postgresql-0                                          1/1     Running     0          175m
-```
-
-All pods should show `1/1 Running` status. If any pods are not running, check the troubleshooting section.
-
-</details>
 
 ## Configuration
 
@@ -171,39 +119,18 @@ helm install nemo-infra ./deploy/nemo-infra \
 
 ## Uninstallation
 
-### Standard Uninstall
+📖 **Uninstall documentation**: See [main README](../../README.md#uninstallation) for complete uninstallation instructions.
 
+**Quick reference:**
 ```bash
-# Uninstall Helm release
+# Step 1: Uninstall nemo-instances first (must be done first)
+helm uninstall nemo-instances -n <namespace>
+
+# Step 2: Uninstall infrastructure
 helm uninstall nemo-infra -n <namespace>
-
-# Clean up PVCs (optional)
-oc delete pvc --all -n <namespace>
-
-# Clean up webhooks (optional)
-oc delete validatingwebhookconfigurations \
-  volcano-admission-service-jobs-validate \
-  volcano-admission-service-pods-validate \
-  volcano-admission-service-queues-validate
 ```
 
-### Full Cleanup
-
-```bash
-# Uninstall
-helm uninstall nemo-infra -n <namespace>
-
-# Delete PVCs
-oc delete pvc --all -n <namespace>
-
-# Delete remaining resources
-oc delete all --all -n <namespace>
-oc delete configmap,secret,serviceaccount,role,rolebinding --all -n <namespace>
-
-# Delete cluster resources (if needed)
-oc delete clusterrole,clusterrolebinding -l component=volcano
-oc delete validatingwebhookconfigurations | grep volcano
-```
+⚠️ **Important**: Always uninstall `nemo-instances` BEFORE `nemo-infra` because `nemo-instances` depends on infrastructure components and Custom Resources must be deleted first.
 
 ## Troubleshooting
 
