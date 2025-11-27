@@ -21,66 +21,18 @@ This chart installs the NeMo and NIM operators, then deploys 7 custom resources 
 
 ## Prerequisites
 
-### 1. Infrastructure
+📖 **Installation prerequisites**: See [main README](../../README.md#installation) for complete prerequisites and secret creation steps.
+
+### Infrastructure Requirements
 
 1. **Infrastructure must be deployed**: The `nemo-infra` chart must be installed first
 2. **Volcano scheduler must be installed**: Required for NeMo Operator (installed via `nemo-infra` chart)
 
-### 2. Required Secrets (Must be created BEFORE installation)
+### Required Secrets
 
-Following quickstart Step 1.3 (lines 37-53), create these secrets:
+All required secrets must be created **BEFORE** installing this chart. See [main README](../../README.md#step-2-create-required-secrets) for creation commands.
 
-#### NGC Secrets (Required)
-```bash
-export NGC_API_KEY="<YOUR_NGC_API_KEY>"
-
-# NGC Image Pull Secret (for pulling images)
-oc create secret docker-registry ngc-secret \
-  --docker-server=nvcr.io \
-  --docker-username='$oauthtoken' \
-  --docker-password=$NGC_API_KEY \
-  -n <namespace>
-
-# NGC API Secret (for model downloads)
-oc create secret generic ngc-api-secret \
-  --from-literal=NGC_API_KEY=$NGC_API_KEY \
-  -n <namespace>
-```
-
-#### PostgreSQL Secrets (Required)
-These secrets contain the PostgreSQL passwords matching your infrastructure deployment:
-
-```bash
-# Get passwords from infrastructure PostgreSQL secrets
-# Then create the required secrets:
-
-# Customizer PostgreSQL
-oc create secret generic customizer-pg-existing-secret \
-  --from-literal=password=<customizer-postgresql-password> \
-  -n <namespace>
-
-# Datastore PostgreSQL
-oc create secret generic datastore-pg-existing-secret \
-  --from-literal=password=<datastore-postgresql-password> \
-  -n <namespace>
-
-# Entity Store PostgreSQL
-oc create secret generic entity-store-pg-existing-secret \
-  --from-literal=password=<entity-store-postgresql-password> \
-  -n <namespace>
-
-# Evaluator PostgreSQL
-oc create secret generic evaluator-pg-existing-secret \
-  --from-literal=password=<evaluator-postgresql-password> \
-  -n <namespace>
-
-# Guardrail PostgreSQL
-oc create secret generic guardrail-pg-existing-secret \
-  --from-literal=password=<guardrail-postgresql-password> \
-  -n <namespace>
-```
-
-**Note**: The passwords should match the values in `nemo-infra/values.yaml`:
+**PostgreSQL Password Reference**: The passwords should match the values in `nemo-infra/values.yaml`:
 - Customizer: `ncspassword`
 - Datastore: `ndspass`
 - Entity Store: `nespass`
@@ -199,19 +151,15 @@ oc create secret generic wandb-secret \
 1. Helm installs NIM Operator subchart with resource limits (lines 141-145)
 2. No post-install steps required (unlike NeMo Operator)
 
-## Quick Start
+## Installation
 
-**IMPORTANT**: Ensure all prerequisites (secrets and configmaps) are created before installation.
+📖 **Installation guide**: See [main README](../../README.md#installation) for complete installation instructions, including prerequisites and secret creation.
 
+**Quick reference:**
 ```bash
-# Update dependencies (downloads operator charts)
 cd deploy/nemo-instances
 helm dependency update
-
-# Deploy operators and create NeMo instances
-helm install nemo-instances . \
-  -n <namespace> \
-  --set namespace.name=<namespace>
+helm install nemo-instances . -n <namespace> --set namespace.name=<namespace>
 ```
 
 **Deployment Order**:
@@ -285,10 +233,26 @@ All pods should show `Running` status. The NeMo Operator pod shows `2/2 Running`
 
 </details>
 
+## Uninstallation
+
+📖 **Uninstall documentation**: See [main README](../../README.md#uninstallation) for complete uninstallation instructions.
+
+**Quick reference:**
+```bash
+# Uninstall nemo-instances first (pre-delete hook handles CR cleanup automatically)
+helm uninstall nemo-instances -n <namespace>
+
+# Then uninstall nemo-infra
+helm uninstall nemo-infra -n <namespace>
+```
+
+The pre-delete hook (`pre-delete-cleanup.yaml`) automatically deletes Custom Resources before Helm uninstall.
+
 ## Notes
 
 - This chart follows the quickstart Step 6 exactly (lines 152-164)
 - All namespace references are automatically templated
 - Service hostnames are automatically updated to match namespace
 - GPU tolerations are pre-configured for common OpenShift setups
+- **Pre-delete hook** automatically cleans up Custom Resources before Helm uninstall - just run `helm uninstall` and it works!
 

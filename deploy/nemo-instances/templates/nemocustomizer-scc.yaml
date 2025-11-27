@@ -1,0 +1,46 @@
+{{- if .Values.customizer.enabled }}
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: nemo-customizer-scc
+  labels:
+    component: customizer
+    app.kubernetes.io/name: nemo-instances
+    app.kubernetes.io/component: customizer
+allowHostDirVolumePlugin: true
+allowHostIPC: true
+allowHostNetwork: false
+allowHostPID: true
+allowHostPorts: false
+allowPrivilegeEscalation: true
+allowPrivilegedContainer: true
+allowedCapabilities: null
+defaultAddCapabilities:
+- SYS_ADMIN
+- SYS_RESOURCE
+- IPC_LOCK
+fsGroup:
+  type: RunAsAny
+groups: []
+priority: 10
+readOnlyRootFilesystem: false
+requiredDropCapabilities: []
+runAsUser:
+  type: RunAsAny
+seLinuxContext:
+  seLinuxOptions:
+    type: spc_t
+  type: MustRunAs
+supplementalGroups:
+  type: RunAsAny
+users: []
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- hostPath
+- persistentVolumeClaim
+- projected
+- secret
+{{- end }}
+
