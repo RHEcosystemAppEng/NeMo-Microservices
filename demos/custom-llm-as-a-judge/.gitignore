@@ -2,6 +2,8 @@
 .env
 .env.local
 .env.*.local
+env.donotcommit
+# Note: env.donotcommit.example should be committed (it's a template)
 
 # Python
 __pycache__/

@@ -192,6 +192,61 @@ cd deploy/nemo-instances
 helm upgrade nemo-instances . -n <namespace> --set namespace.name=<namespace>
 ```
 
+## Security Context Constraints (SCCs)
+
+OpenShift uses Security Context Constraints (SCCs) to control what security settings pods can use. The NeMo deployment follows the **principle of least privilege** by granting specific SCCs only to the ServiceAccounts that need them.
+
+### SCC Access Pattern
+
+**1. NemoCustomizer SCC (`nemo-customizer-scc`)**
+- **Purpose**: Allows model downloader jobs to run with specific security contexts
+- **Granted to**: `nemocustomizer-sample` ServiceAccount only
+- **Why**: Model downloader jobs need `RunAsAny` to match PVC ownership (user 1000, group 2000)
+- **Not granted to**: `default` ServiceAccount (principle of least privilege)
+
+**2. Nonroot SCC (`nonroot`)**
+- **Purpose**: Standard SCC for inference workloads (requires non-root user)
+- **Granted to**: `default` ServiceAccount (for UI-created InferenceServices)
+- **Why**: UI-created InferenceServices that don't go through NIMService operator use `default` ServiceAccount
+- **Note**: NIMService-created InferenceServices use their own ServiceAccounts (handled by NIMService operator)
+
+### Best Practices
+
+1. **Dedicated ServiceAccounts**: Each workload should have its own ServiceAccount
+   - NIMService operator creates a ServiceAccount per NIMService (name = NIMService name)
+   - Customizer uses `nemocustomizer-sample` ServiceAccount
+   - UI-created InferenceServices use `default` ServiceAccount
+
+2. **Explicit SCC Access**: SCCs are granted via RBAC Role/Binding, not via `oc adm policy`
+   - See `deploy/nemo-instances/templates/nemocustomizer-oc-rbac.yaml`
+   - Follows OpenShift best practices for RBAC
+
+3. **Principle of Least Privilege**: Only grant the minimum SCC required
+   - Customizer jobs need `nemo-customizer-scc` (RunAsAny)
+   - Inference workloads need `nonroot` (MustRunAsNonRoot)
+
+### Troubleshooting SCC Issues
+
+If pods fail with SCC errors:
+
+```bash
+# Check which SCCs are available to a ServiceAccount
+oc get rolebinding -n <namespace> | grep <serviceaccount-name>
+
+# Check SCC details
+oc get scc nonroot -o yaml
+oc get scc nemo-customizer-scc -o yaml
+
+# Verify ServiceAccount is bound correctly
+oc get rolebinding default-scc-nonroot-binding -n <namespace> -o yaml
+oc get rolebinding customizer-scc-nemo-customizer-scc-binding -n <namespace> -o yaml
+```
+
+**Common Issues:**
+- **Permission denied errors**: Check if pod's ServiceAccount has the correct SCC access
+- **SCC conflicts**: Ensure only one SCC is granted per ServiceAccount (OpenShift selects the most permissive)
+- **UI-created InferenceServices**: Should use `default` ServiceAccount with `nonroot` SCC (automatically configured)
+
 ## Uninstallation
 
 ### ⚠️ Important: Uninstall Order

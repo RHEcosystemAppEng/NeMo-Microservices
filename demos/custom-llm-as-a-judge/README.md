@@ -23,8 +23,18 @@ The workflow:
 - ✅ NeMo Entity Store
 - ✅ LlamaStack (optional but recommended)
 
+### Required Model
+- ✅ **NIM Model Serving**: `meta/llama-3.2-1b-instruct` model deployed via NIM Model Serving
+  - Service: Your NIM Model Serving InferenceService name (configured via `NIM_MODEL_SERVING_SERVICE` in `env.donotcommit`)
+  - This model is used for both the **judge** (evaluator) and **target** (summary generator) models
+  - The model must be accessible via the configured external URL or cluster-internal service
+  - **How to find your service name**: `oc get inferenceservice -n <your-namespace>`
+  - **How to find your external URL**: `oc get route -n <your-namespace> | grep <your-service-name>` or check your OpenShift console
+
 ### API Keys (Optional - Not Required)
-- **No API Key Required**: This tutorial uses your deployed NIM endpoint (`meta-llama3-1b-instruct` service) for both judge and target models
+- **No External API Key Required**: This tutorial uses your deployed NIM Model Serving endpoint (your InferenceService with `meta/llama-3.2-1b-instruct` model) for both judge and target models
+- **Service Account Token Required**: You need to set `NIM_SERVICE_ACCOUNT_TOKEN` in `env.donotcommit` for authentication with the external NIM Model Serving URL
+  - **How to get your token**: `oc get secret <service-account-name> -n <namespace> -o jsonpath='{.data.token}' | base64 -d`
 - **OpenAI API Key**: Optional - only if you want to use OpenAI models instead (not used in this tutorial)
 - **NVIDIA API Key**: Optional - only if you want to use NVIDIA API models instead (not used in this tutorial)
 
@@ -43,30 +53,52 @@ pip install -r requirements.txt
 
 ### 2. Configure Environment
 
-Create a `.env` file (or set environment variables):
+Copy the template and create `env.donotcommit` file:
 
 ```bash
-# Required
-NMS_NAMESPACE=anemo-rhoai
+cp env.donotcommit.example env.donotcommit
+# Edit env.donotcommit and add your NIM_SERVICE_ACCOUNT_TOKEN
+```
 
-# NIM Configuration
-# The notebook uses meta-llama3-1b-instruct service by default (standard NIM service)
-# This service serves meta/llama-3.2-1b-instruct model
-STANDARD_NIM_SERVICE=meta-llama3-1b-instruct  # Default service (can override if needed)
+Required configuration in `env.donotcommit`:
 
-# Optional - Only needed if using external APIs (not used in this tutorial)
-# OPENAI_API_KEY=your-openai-api-key
-# NVIDIA_API_KEY=your-nvidia-api-key
+```bash
+# Required: Your namespace
+NMS_NAMESPACE=your-namespace
+
+# NIM Model Serving Configuration
+# Replace with your actual InferenceService name
+NIM_MODEL_SERVING_SERVICE=your-nim-service-name
+NIM_MODEL_SERVING_MODEL=meta/llama-3.2-1b-instruct
+# Replace with your actual external URL (HTTPS)
+# Format: https://<service-name>-<namespace>.apps.<cluster-domain>
+NIM_MODEL_SERVING_URL_EXTERNAL=https://your-service-name-your-namespace.apps.your-cluster-domain.com
+USE_NIM_MODEL_SERVING=true
+USE_EXTERNAL_URL=true
+
+# REQUIRED: Service Account Token for authentication
+# Get from: oc get secret <service-account-name> -n <namespace> -o jsonpath='{.data.token}' | base64 -d
+NIM_SERVICE_ACCOUNT_TOKEN=your-token-here
 
 # Optional
-RUN_LOCALLY=true  # Set to true for local development with port-forwards
+RUN_LOCALLY=false  # Set to true for local development with port-forwards
 DATASET_NAME=custom-llm-as-a-judge-eval-data
 ```
 
+**How to find your values**:
+- **Namespace**: Your OpenShift project/namespace name
+- **Service Name**: `oc get inferenceservice -n <your-namespace>` - look for your NIM Model Serving InferenceService
+- **External URL**: 
+  - Option 1: `oc get route -n <your-namespace> | grep <your-service-name>`
+  - Option 2: Check OpenShift console → Networking → Routes
+  - Format: `https://<service-name>-<namespace>.apps.<cluster-domain>`
+- **Service Account Token**: `oc get secret <service-account-name> -n <namespace> -o jsonpath='{.data.token}' | base64 -d`
+
 **Note**: 
-- The notebook is configured by default to use your deployed NIM endpoint (`meta-llama3-1b-instruct` service) for both judge and target models
-- Model used: `meta/llama-3.2-1b-instruct` (deployed in the standard NIM service)
-- No API keys required - uses cluster-internal service URLs
+- The notebook uses NIM Model Serving (your configured service) for both judge and target models
+- Model used: `meta/llama-3.2-1b-instruct` (deployed via NIM Model Serving)
+- **Required**: `NIM_SERVICE_ACCOUNT_TOKEN` must be set in `env.donotcommit` for external URL authentication
+- The `env.donotcommit` file is git-ignored and will NOT be committed to version control
 
 ### 3. Set Up Port-Forwards (if running locally)
 
@@ -76,12 +108,12 @@ If `RUN_LOCALLY=true`, run the port-forward script:
 ./port-forward.sh
 ```
 
-Or manually:
+Or manually (replace `<your-namespace>` with your actual namespace):
 ```bash
-oc port-forward -n anemo-rhoai svc/nemodatastore-sample 8001:8000 &
-oc port-forward -n anemo-rhoai svc/nemoentitystore-sample 8002:8000 &
-oc port-forward -n anemo-rhoai svc/nemoevaluator-sample 8004:8000 &
-oc port-forward -n anemo-rhoai svc/llamastack 8321:8321 &
+oc port-forward -n <your-namespace> svc/nemodatastore-sample 8001:8000 &
+oc port-forward -n <your-namespace> svc/nemoentitystore-sample 8002:8000 &
+oc port-forward -n <your-namespace> svc/nemoevaluator-sample 8004:8000 &
+oc port-forward -n <your-namespace> svc/llamastack 8321:8321 &
 ```
 
 ### 4. Run the Notebook
@@ -115,19 +147,21 @@ The notebook uses `config.py` which automatically:
 
 ### Judge Model
 
-The notebook uses your deployed NIM endpoint by default:
-- **Service**: `meta-llama3-1b-instruct` (standard NIM service)
+The notebook uses your deployed NIM Model Serving endpoint by default:
+- **Service**: Your NIM Model Serving InferenceService (configured via `NIM_MODEL_SERVING_SERVICE` in `env.donotcommit`)
 - **Model**: `meta/llama-3.2-1b-instruct`
-- **No API key required**
+- **Authentication**: Service Account Token (set in `env.donotcommit` as `NIM_SERVICE_ACCOUNT_TOKEN`)
+- **URL**: External HTTPS URL (configured via `NIM_MODEL_SERVING_URL_EXTERNAL` in `env.donotcommit`)
 
 ### Target Model
 
-The notebook uses the same NIM endpoint for the target model:
-- **Service**: `meta-llama3-1b-instruct` (standard NIM service)
+The notebook uses the same NIM Model Serving endpoint for the target model:
+- **Service**: Your NIM Model Serving InferenceService (configured via `NIM_MODEL_SERVING_SERVICE` in `env.donotcommit`)
 - **Model**: `meta/llama-3.2-1b-instruct`
-- **No API key required**
+- **Authentication**: Service Account Token (set in `env.donotcommit` as `NIM_SERVICE_ACCOUNT_TOKEN`)
+- **URL**: External HTTPS URL (configured via `NIM_MODEL_SERVING_URL_EXTERNAL` in `env.donotcommit`)
 
-**Note**: If you want to use different models (OpenAI, NVIDIA API, or a different NIM service), you can modify the model configuration in the notebook cells. However, the default configuration works out of the box with your deployed NIM.
+**Note**: If you want to use different models (OpenAI, NVIDIA API, or a different NIM service), you can modify the model configuration in the notebook cells. However, the default configuration works out of the box with your deployed NIM Model Serving endpoint.
 
 ### Adjusting Sample Size
 
@@ -203,17 +237,21 @@ If you must use a Knative InferenceService, you have these options:
 
 ### Job Submission Fails
 
-- Verify Evaluator service is running: `oc get pods -n anemo-rhoai | grep evaluator`
-- Check Evaluator logs: `oc logs -n anemo-rhoai -l app.kubernetes.io/name=nemo-evaluator --tail=100`
-- Verify NIM endpoint is accessible: `curl http://meta-llama3-1b-instruct.anemo-rhoai.svc.cluster.local:8000/v1/models`
+- Verify Evaluator service is running: `oc get pods -n <your-namespace> | grep evaluator`
+- Check Evaluator logs: `oc logs -n <your-namespace> -l app.kubernetes.io/name=nemo-evaluator --tail=100`
+- Verify NIM endpoint is accessible: 
+  - External URL: `curl -H "Authorization: Bearer <your-token>" <your-external-url>/v1/models`
+  - Cluster-internal: `curl http://<your-service-name>-predictor.<your-namespace>.svc.cluster.local:80/v1/models`
 - Verify the model `meta/llama-3.2-1b-instruct` is available in the service
-- Check Argo Workflows connection: `oc get nemoevaluator nemoevaluator-sample -n anemo-rhoai -o jsonpath='{.spec.argoWorkflows.endpoint}'`
+- Check Argo Workflows connection: `oc get nemoevaluator nemoevaluator-sample -n <your-namespace> -o jsonpath='{.spec.argoWorkflows.endpoint}'`
+- Verify `NIM_SERVICE_ACCOUNT_TOKEN` is set correctly in `env.donotcommit`
 
 ### Job Stuck in "pending" or "running"
 
-- Check Argo Workflows: `oc get workflows -n anemo-rhoai`
-- Check evaluation job pods: `oc get pods -n anemo-rhoai | grep eval`
+- Check Argo Workflows: `oc get workflows -n <your-namespace>`
+- Check evaluation job pods: `oc get pods -n <your-namespace> | grep eval`
 - Verify GPU resources are available (if required)
+- Check if NIM Model Serving endpoint is accessible from within the cluster
 
 ### Dataset Upload Fails
 
