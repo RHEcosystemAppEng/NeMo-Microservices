@@ -86,8 +86,8 @@ oc get inferenceservice -n $NAMESPACE
 # Typically: <inferenceservice-name>-sa
 oc create token <service-account-name> -n $NAMESPACE --duration=8760h
 
-# Example:
-# oc create token anemo-rhoai-model-sa -n anemo-rhoai --duration=8760h
+# Example (replace with your actual service account and namespace):
+# oc create token my-model-sa -n my-namespace --duration=8760h
 ```
 
 **Save this token** - you'll need it for demo `env.donotcommit` files
@@ -97,8 +97,9 @@ oc create token <service-account-name> -n $NAMESPACE --duration=8760h
 # Get the external URL of your InferenceService
 oc get inferenceservice <your-inferenceservice-name> -n $NAMESPACE -o jsonpath='{.status.url}'
 
-# Example:
-# oc get inferenceservice anemo-rhoai-model -n anemo-rhoai -o jsonpath='{.status.url}'
+# Example (replace with your actual InferenceService name and namespace):
+# oc get inferenceservice my-model -n my-namespace -o jsonpath='{.status.url}'
+# Output: https://my-model-my-namespace.apps.my-cluster.example.com
 ```
 
 **Save this URL** - used for demos and fallback if LlamaStack is unavailable
@@ -197,6 +198,11 @@ USE_EXTERNAL_URL=true
 RUN_LOCALLY=false  # Set to true only if running locally with port-forwards
 ```
 
+**Find your InferenceService name:**
+```bash
+oc get inferenceservice -n $NAMESPACE
+```
+
 ### 2. Run in Cluster (Recommended)
 ```bash
 # Get Jupyter pod name
@@ -260,8 +266,8 @@ If your cluster has GPU nodes with taints (e.g., `g5-gpu=true:NoSchedule` or `nv
 # Add GPU tolerations to InferenceService (for both g5-gpu and nvidia.com/gpu taints)
 oc patch inferenceservice <inferenceservice-name> -n $NAMESPACE --type='merge' -p='{"spec":{"predictor":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}]}}}'
 
-# Example:
-# oc patch inferenceservice anemo-rhoai-model -n anemo-rhoai --type='merge' -p='{"spec":{"predictor":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}]}}}'
+# Example (replace with your actual InferenceService name and namespace):
+# oc patch inferenceservice my-model -n my-namespace --type='merge' -p='{"spec":{"predictor":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}]}}}'
 
 # Delete the pending pod to trigger recreation with new toleration
 oc delete pod <pending-pod-name> -n $NAMESPACE
@@ -273,8 +279,8 @@ oc get deployment -n $NAMESPACE | grep <inferenceservice-name>-predictor
 # Scale down the old revision
 oc scale deployment <old-revision-deployment-name> -n $NAMESPACE --replicas=0
 
-# Example:
-# oc scale deployment anemo-rhoai-model-predictor-00001-deployment -n anemo-rhoai --replicas=0
+# Example (replace with your actual deployment name and namespace):
+# oc scale deployment my-model-predictor-00001-deployment -n my-namespace --replicas=0
 
 # Verify new pod is scheduled on GPU node
 oc get pod <new-pod-name> -n $NAMESPACE -o wide
@@ -288,8 +294,8 @@ For Notebook or Workbench resources that are pending due to missing GPU tolerati
 # Patch Notebook CR to add GPU tolerations (for both g5-gpu and nvidia.com/gpu taints)
 oc patch notebook <notebook-name> -n $NAMESPACE --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}]}}}}'
 
-# Example:
-# oc patch notebook anemo-rhoai-wb -n anemo-rhoai --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}]}}}}'
+# Example (replace with your actual notebook name and namespace):
+# oc patch notebook my-notebook -n my-namespace --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}]}}}}'
 
 # Delete the pending pod to trigger recreation with new tolerations
 oc delete pod <pending-pod-name> -n $NAMESPACE

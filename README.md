@@ -78,7 +78,12 @@ All pods should show `1/1 Running` status. If any pods are not running, check th
 
 Before deploying NeMo instances, create the required secrets:
 
-#### NGC Secrets (Required)
+**Note**: 
+- PostgreSQL secrets are **automatically created** by the Helm chart
+- NGC secrets are **required** and will be validated by a pre-install hook before Helm proceeds
+- If NGC secrets are missing, Helm installation will fail with a clear error message
+
+#### NGC Secrets (Required - Validated Before Installation)
 ```bash
 export NGC_API_KEY="<YOUR_NGC_API_KEY>"
 
@@ -95,35 +100,24 @@ oc create secret generic ngc-api-secret \
   -n <namespace>
 ```
 
-#### PostgreSQL Secrets (Required)
+#### PostgreSQL Secrets (Automatically Created)
 
-These secrets must match the PostgreSQL passwords from your infrastructure deployment. Default passwords (development only):
+**✅ PostgreSQL secrets are automatically created by the Helm chart.**
 
+The Helm chart automatically:
+1. Reads passwords from infrastructure PostgreSQL secrets (`nemo-infra-*-postgresql`)
+2. Creates all required `*-pg-existing-secret` secrets with the correct passwords
+3. Falls back to defaults if infrastructure secrets don't exist
+
+**You do NOT need to create PostgreSQL secrets manually.**
+
+If you need to override passwords (e.g., for production), use:
 ```bash
-# Customizer PostgreSQL
-oc create secret generic customizer-pg-existing-secret \
-  --from-literal=password=ncspassword \
-  -n <namespace>
-
-# Datastore PostgreSQL
-oc create secret generic datastore-pg-existing-secret \
-  --from-literal=password=ndspass \
-  -n <namespace>
-
-# Entity Store PostgreSQL
-oc create secret generic entity-store-pg-existing-secret \
-  --from-literal=password=nespass \
-  -n <namespace>
-
-# Evaluator PostgreSQL
-oc create secret generic evaluator-pg-existing-secret \
-  --from-literal=password=evalpass \
-  -n <namespace>
-
-# Guardrail PostgreSQL
-oc create secret generic guardrail-pg-existing-secret \
-  --from-literal=password=guardrailpass \
-  -n <namespace>
+helm install nemo-instances ./deploy/nemo-instances \
+  -n <namespace> \
+  --set namespace.name=<namespace> \
+  --set postgresqlSecrets.evaluator.password=<your-password> \
+  --set postgresqlSecrets.guardrail.password=<your-password>
 ```
 
 ⚠️ **Security Note**: Default passwords are for **development/testing only**. For production, use strong, randomly generated passwords.
@@ -344,4 +338,42 @@ Some resources are retained by default due to resource policies:
 - **CustomResourceDefinitions (CRDs)**: Cluster-scoped, typically retained
 - **PVCs**: Retained to preserve data (delete manually if needed)
 - **ClusterRole/ClusterRoleBinding**: May be retained if used by other namespaces
+
+## Demos
+
+This repository includes several demo notebooks and tutorials:
+
+### Available Demos
+
+1. **RAG (Retrieval-Augmented Generation) Demo** - [`demos/rag/`](demos/rag/)
+   - Build a complete RAG pipeline using NeMo Data Store, Entity Store, and NIM models
+   - Document ingestion, embedding generation, vector storage, and query processing
+   - 📖 [Full documentation](demos/rag/README.md)
+
+2. **LLM-as-a-Judge Demo** - [`demos/custom-llm-as-a-judge/`](demos/custom-llm-as-a-judge/)
+   - Use NeMo Evaluator's Custom LLM-as-a-Judge feature to evaluate LLM outputs
+   - Evaluate medical consultation summaries on completeness and correctness metrics
+   - 📖 [Full documentation](demos/custom-llm-as-a-judge/README.md)
+
+3. **LlamaStack Demo** - [`demos/llamastack/`](demos/llamastack/)
+   - End-to-end flow using LlamaStack for unified API access
+   - 📖 [Full documentation](demos/llamastack/README.md)
+
+4. **Jupyter Notebook Demo** - [`demos/jupyter-notebook/`](demos/jupyter-notebook/)
+   - Example notebook for NeMo Microservices
+   - 📖 [Full documentation](demos/jupyter-notebook/README.md)
+
+### Quick Command Reference
+
+For a concise command reference covering infrastructure deployment, configuration, and running demos, see [commands.md](commands.md).
+
+### Demo Prerequisites
+
+All demos require:
+- NeMo Microservices deployed (see [Installation](#installation) above)
+- KServe InferenceService with `meta/llama-3.2-1b-instruct` model (for RAG and Judge demos)
+- Service Account Token for authentication (see demo-specific READMEs)
+- Jupyter Workbench or local Jupyter environment
+
+Each demo includes detailed setup instructions in its respective README.
 

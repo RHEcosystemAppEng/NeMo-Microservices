@@ -28,11 +28,43 @@ This chart installs the NeMo and NIM operators, then deploys 7 custom resources 
 1. **Infrastructure must be deployed**: The `nemo-infra` chart must be installed first
 2. **Volcano scheduler must be installed**: Required for NeMo Operator (installed via `nemo-infra` chart)
 
+### Pre-Install Validation
+
+**✅ Automatic Validation**: The Helm chart includes a pre-install hook that automatically validates all required secrets exist before proceeding with installation.
+
+The validation hook checks:
+- ✅ NGC secrets (`ngc-secret`, `ngc-api-secret`) - **REQUIRED**
+- ✅ Infrastructure PostgreSQL secrets (for auto-creation) - Optional (falls back to defaults)
+- ⚠️ Optional secrets (WandB) - Optional
+
+**If validation fails**, Helm installation will stop with a clear error message showing which secrets are missing and how to create them.
+
 ### Required Secrets
 
-All required secrets must be created **BEFORE** installing this chart. See [main README](../../README.md#step-2-create-required-secrets) for creation commands.
+#### PostgreSQL Secrets (Automatically Created)
 
-**PostgreSQL Password Reference**: The passwords should match the values in `nemo-infra/values.yaml`:
+**IMPORTANT**: PostgreSQL secrets are **automatically created** by the Helm chart. You do NOT need to create them manually.
+
+The Helm chart automatically:
+1. Reads passwords from infrastructure PostgreSQL secrets (`nemo-infra-*-postgresql`)
+2. Creates the required `*-pg-existing-secret` secrets with the correct passwords
+3. Falls back to defaults from `values.yaml` if infrastructure secrets don't exist
+
+**Automatically Created Secrets:**
+- `customizer-pg-existing-secret` - Customizer PostgreSQL password
+- `datastore-pg-existing-secret` - Datastore PostgreSQL password
+- `entity-store-pg-existing-secret` - Entity Store PostgreSQL password
+- `evaluator-pg-existing-secret` - Evaluator PostgreSQL password
+- `guardrail-pg-existing-secret` - Guardrail PostgreSQL password
+
+These secrets are created from the `postgresql-secrets.yaml` template.
+
+**Manual Override (if needed):**
+If infrastructure secrets are in a different namespace or you need custom passwords, you can:
+1. Override via `--set` flags: `--set postgresqlSecrets.evaluator.password=<custom-password>`
+2. Or create secrets manually before installation (they will not be overwritten)
+
+**PostgreSQL Password Reference**: Default passwords (used as fallbacks):
 - Customizer: `ncspassword`
 - Datastore: `ndspass`
 - Entity Store: `nespass`
@@ -66,6 +98,28 @@ helm install nemo-instances ./deploy/nemo-instances \
 ```
 
 **⚠️ WARNING**: Do NOT use default credentials in production environments!
+
+#### NGC Secrets (Required - Validated Before Installation)
+
+**IMPORTANT**: NGC secrets are **required** and will be validated by the pre-install hook. Installation will fail if these secrets are missing.
+
+```bash
+export NGC_API_KEY="<YOUR_NGC_API_KEY>"
+
+# NGC Image Pull Secret (for pulling images)
+oc create secret docker-registry ngc-secret \
+  --docker-server=nvcr.io \
+  --docker-username='$oauthtoken' \
+  --docker-password=$NGC_API_KEY \
+  -n <namespace>
+
+# NGC API Secret (for model downloads)
+oc create secret generic ngc-api-secret \
+  --from-literal=NGC_API_KEY=$NGC_API_KEY \
+  -n <namespace>
+```
+
+**Validation**: The pre-install hook automatically checks these secrets exist and validates their structure before Helm proceeds.
 
 #### Optional Secrets
 

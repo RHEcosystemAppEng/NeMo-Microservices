@@ -17,6 +17,22 @@ storage:
   storageClass: ""  # Empty string uses default storage class
   volumeAccessMode: ReadWriteOnce
 
+# PostgreSQL Secrets Configuration
+# These passwords are used as fallbacks if infrastructure PostgreSQL secrets cannot be read.
+# The Helm template will automatically read passwords from infrastructure secrets if available.
+# Only override these if infrastructure secrets don't exist or you need different passwords.
+postgresqlSecrets:
+  customizer:
+    password: "ncspassword"  # Fallback if nemo-infra-customizer-postgresql secret not found
+  datastore:
+    password: "ndspass"  # Fallback if nemo-infra-datastore-postgresql secret not found
+  entitystore:
+    password: "nespass"  # Fallback if nemo-infra-entity-store-postgresql secret not found
+  evaluator:
+    password: "evalpass"  # Fallback if nemo-infra-evaluator-postgresql secret not found
+  guardrail:
+    password: "guardrailpass"  # Fallback if nemo-infra-guardrail-postgresql secret not found
+
 # ===== NemoCustomizer Configuration =====
 # Image: nvcr.io/nvidia/nemo-microservices/customizer-api:25.08 (matches latest samples)
 customizer:

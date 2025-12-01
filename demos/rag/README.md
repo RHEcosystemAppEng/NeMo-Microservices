@@ -22,7 +22,7 @@ This example implements a complete RAG workflow:
 - ✅ NeMo Guardrails (v25.08+) - Optional but recommended
 - ✅ **LlamaStack Server** - Unified API abstraction layer (deployed via Helm with Bearer token support)
 - ✅ **KServe InferenceService** with `meta/llama-3.2-1b-instruct` model
-  - Service name: `anemo-rhoai-model-predictor` (or your InferenceService predictor service)
+  - Service name: Your InferenceService predictor service name
   - Must be accessible via Istio service mesh
   - LlamaStack must have Istio sidecar injected to communicate with KServe services
 - ✅ Embedding NIM: `nv-embedqa-1b-v2` service
@@ -46,9 +46,9 @@ LlamaStack requires a Kubernetes service account token to authenticate with the 
 oc create token <service-account-name> -n <your-namespace> --duration=8760h
 ```
 
-**Example:**
+**Example (replace with your actual service account and namespace):**
 ```bash
-oc create token anemo-rhoai-model-sa -n anemo-rhoai --duration=8760h
+oc create token my-model-sa -n my-namespace --duration=8760h
 ```
 
 **Add to `env.donotcommit`:**
@@ -67,8 +67,8 @@ oc get inferenceservice <your-inferenceservice-name> -n <your-namespace> -o json
 
 **Example:**
 ```bash
-oc get inferenceservice anemo-rhoai-model -n anemo-rhoai -o jsonpath='{.status.url}'
-# Output: https://anemo-rhoai-model-anemo-rhoai.apps.ai-dev05.kni.syseng.devcluster.openshift.com
+oc get inferenceservice my-model -n my-namespace -o jsonpath='{.status.url}'
+# Example output: https://my-model-my-namespace.apps.my-cluster.example.com
 ```
 
 **Add to `env.donotcommit` (if not auto-detected):**
@@ -196,7 +196,8 @@ NIM_SERVICE_ACCOUNT_TOKEN=<your-service-account-token>
 Get your token:
 ```bash
 # Replace with your actual service account name (typically: <inferenceservice-name>-sa)
-oc create token anemo-rhoai-model-sa -n <your-namespace> --duration=8760h
+# Example: oc create token my-model-sa -n my-namespace --duration=8760h
+oc create token <service-account-name> -n <your-namespace> --duration=8760h
 ```
 
 3. **Model External URL** (REQUIRED for fallback):

@@ -1,0 +1,200 @@
+# Pre-install hook to validate required secrets exist before Helm proceeds
+# This ensures all prerequisites are met before installation begins
+# This hook runs automatically when you run: helm install nemo-instances
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nemo-instances-pre-install-validation
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    component: validation
+    app.kubernetes.io/name: nemo-instances
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  activeDeadlineSeconds: 60
+  backoffLimit: 0  # Fail immediately if validation fails
+  template:
+    metadata:
+      labels:
+        component: validation
+    spec:
+      serviceAccountName: nemo-instances-validation
+      restartPolicy: Never
+      containers:
+      - name: validation
+        image: registry.redhat.io/openshift4/ose-cli:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          NAMESPACE="{{ .Values.namespace.name }}"
+          ERRORS=0
+          
+          echo "🔍 Pre-install validation: Checking required secrets in namespace: $NAMESPACE"
+          echo ""
+          
+          # Function to check if a secret exists
+          check_secret() {
+            local SECRET_NAME=$1
+            local REQUIRED=$2
+            local DESCRIPTION=$3
+            
+            echo -n "  Checking $DESCRIPTION ($SECRET_NAME)... "
+            if oc get secret "$SECRET_NAME" -n "$NAMESPACE" >/dev/null 2>&1; then
+              echo "✅ Found"
+              return 0
+            else
+              if [ "$REQUIRED" = "required" ]; then
+                echo "❌ MISSING (REQUIRED)"
+                ERRORS=$((ERRORS + 1))
+                return 1
+              else
+                echo "⚠️  Not found (optional)"
+                return 0
+              fi
+            fi
+          }
+          
+          # Function to validate secret has required keys
+          validate_secret_keys() {
+            local SECRET_NAME=$1
+            local REQUIRED_KEYS=$2
+            local DESCRIPTION=$3
+            
+            if ! oc get secret "$SECRET_NAME" -n "$NAMESPACE" >/dev/null 2>&1; then
+              return 0  # Secret doesn't exist, skip validation
+            fi
+            
+            echo -n "  Validating $DESCRIPTION keys... "
+            for KEY in $REQUIRED_KEYS; do
+              if ! oc get secret "$SECRET_NAME" -n "$NAMESPACE" -o jsonpath="{.data.$KEY}" >/dev/null 2>&1; then
+                echo "❌ Missing key: $KEY"
+                ERRORS=$((ERRORS + 1))
+                return 1
+              fi
+            done
+            echo "✅ All keys present"
+            return 0
+          }
+          
+          # Check NGC secrets (REQUIRED)
+          echo "📋 Checking NGC Secrets (Required):"
+          check_secret "ngc-secret" "required" "NGC Image Pull Secret"
+          if [ $? -eq 0 ]; then
+            # Validate ngc-secret is a docker-registry secret
+            SECRET_TYPE=$(oc get secret ngc-secret -n "$NAMESPACE" -o jsonpath='{.type}' 2>/dev/null || echo "")
+            if [ "$SECRET_TYPE" != "kubernetes.io/dockerconfigjson" ] && [ "$SECRET_TYPE" != "kubernetes.io/dockercfg" ]; then
+              echo "    ⚠️  Warning: ngc-secret type is '$SECRET_TYPE', expected docker-registry secret"
+            fi
+          fi
+          
+          check_secret "ngc-api-secret" "required" "NGC API Secret"
+          if [ $? -eq 0 ]; then
+            validate_secret_keys "ngc-api-secret" "NGC_API_KEY" "NGC API Secret"
+          fi
+          
+          echo ""
+          
+          # Check PostgreSQL secrets (will be auto-created, but validate infrastructure secrets exist)
+          echo "📋 Checking Infrastructure PostgreSQL Secrets (for auto-creation):"
+          INFRA_SECRETS=(
+            "nemo-infra-customizer-postgresql:Customizer PostgreSQL"
+            "nemo-infra-datastore-postgresql:Datastore PostgreSQL"
+            "nemo-infra-entity-store-postgresql:Entity Store PostgreSQL"
+            "nemo-infra-evaluator-postgresql:Evaluator PostgreSQL"
+            "nemo-infra-guardrail-postgresql:Guardrail PostgreSQL"
+          )
+          
+          INFRA_SECRETS_FOUND=0
+          for SECRET_INFO in "${INFRA_SECRETS[@]}"; do
+            SECRET_NAME=$(echo "$SECRET_INFO" | cut -d: -f1)
+            SECRET_DESC=$(echo "$SECRET_INFO" | cut -d: -f2)
+            if oc get secret "$SECRET_NAME" -n "$NAMESPACE" >/dev/null 2>&1; then
+              echo "  ✅ $SECRET_DESC ($SECRET_NAME) - will be used for auto-creation"
+              INFRA_SECRETS_FOUND=$((INFRA_SECRETS_FOUND + 1))
+            else
+              echo "  ⚠️  $SECRET_DESC ($SECRET_NAME) - not found, will use defaults from values.yaml"
+            fi
+          done
+          
+          echo ""
+          echo "📊 Summary:"
+          echo "  - Infrastructure PostgreSQL secrets found: $INFRA_SECRETS_FOUND/5"
+          echo "  - PostgreSQL secrets will be auto-created from infrastructure or defaults"
+          echo ""
+          
+          # Check optional secrets
+          echo "📋 Checking Optional Secrets:"
+          check_secret "wandb-secret" "optional" "WandB Secret"
+          echo ""
+          
+          # Final validation
+          if [ $ERRORS -gt 0 ]; then
+            echo "❌ Validation FAILED: $ERRORS required secret(s) missing"
+            echo ""
+            echo "Please create the missing secrets before installing:"
+            echo ""
+            echo "# NGC Image Pull Secret"
+            echo "oc create secret docker-registry ngc-secret \\"
+            echo "  --docker-server=nvcr.io \\"
+            echo "  --docker-username='\$oauthtoken' \\"
+            echo "  --docker-password=\$NGC_API_KEY \\"
+            echo "  -n $NAMESPACE"
+            echo ""
+            echo "# NGC API Secret"
+            echo "oc create secret generic ngc-api-secret \\"
+            echo "  --from-literal=NGC_API_KEY=\$NGC_API_KEY \\"
+            echo "  -n $NAMESPACE"
+            echo ""
+            exit 1
+          else
+            echo "✅ Validation PASSED: All required secrets are present"
+            echo ""
+            echo "Proceeding with Helm installation..."
+            exit 0
+          fi
+---
+# ServiceAccount and RBAC for validation hook
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nemo-instances-validation
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    component: validation
+    app.kubernetes.io/name: nemo-instances
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: nemo-instances-validation
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    component: validation
+    app.kubernetes.io/name: nemo-instances
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: nemo-instances-validation
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    component: validation
+    app.kubernetes.io/name: nemo-instances
+subjects:
+- kind: ServiceAccount
+  name: nemo-instances-validation
+  namespace: {{ .Values.namespace.name }}
+roleRef:
+  kind: Role
+  name: nemo-instances-validation
+  apiGroup: rbac.authorization.k8s.io
+
