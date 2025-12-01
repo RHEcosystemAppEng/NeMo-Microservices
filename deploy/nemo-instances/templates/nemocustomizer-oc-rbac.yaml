@@ -1,4 +1,8 @@
 {{- if .Values.customizer.enabled }}
+# Role and RoleBinding for NemoCustomizer SCC access
+# Only the customizer ServiceAccount gets access to nemo-customizer-scc
+# This follows the principle of least privilege - each workload gets only the SCC it needs
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -27,12 +31,44 @@ subjects:
 - kind: ServiceAccount
   name: {{ .Values.customizer.name }}
   namespace: {{ .Values.namespace.name }}
-- kind: ServiceAccount
-  name: default
-  namespace: {{ .Values.namespace.name }}
 roleRef:
   kind: Role
   name: customizer-scc-nemo-customizer-scc
   apiGroup: rbac.authorization.k8s.io
 {{- end }}
+
+# Role and RoleBinding for nonroot SCC access
+# Grants nonroot SCC to default ServiceAccount for UI-created InferenceServices
+# NIMService-created InferenceServices use their own ServiceAccounts (handled by NIMService operator)
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: default-scc-nonroot
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app.kubernetes.io/name: nemo-instances
+    app.kubernetes.io/component: scc
+rules:
+- apiGroups: ['security.openshift.io']
+  resources: ['securitycontextconstraints']
+  verbs: ['use']
+  resourceNames: ['nonroot']
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: default-scc-nonroot-binding
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app.kubernetes.io/name: nemo-instances
+    app.kubernetes.io/component: scc
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: {{ .Values.namespace.name }}
+roleRef:
+  kind: Role
+  name: default-scc-nonroot
+  apiGroup: rbac.authorization.k8s.io
 
