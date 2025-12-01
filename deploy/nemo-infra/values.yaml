@@ -20,7 +20,7 @@ install:
   datastore: true
   entityStore: true
   customizer: true
-  jupyter: true
+  jupyter: false  # Disabled by default - enable if needed for demos
   guardrail: true
   evaluator: true
   volcano: true

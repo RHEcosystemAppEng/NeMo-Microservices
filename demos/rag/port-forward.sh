@@ -2,6 +2,11 @@
 # Port-forward script for RAG tutorial
 # Run this script to set up port-forwards for local development
 # This script monitors and auto-restarts port-forwards if they die
+#
+# Configuration:
+#   Set NMS_NAMESPACE environment variable to your namespace, or it will default to "anemo-rhoai"
+#   Example: NMS_NAMESPACE=my-namespace ./port-forward.sh
+#   Or set it in your env.donotcommit file (recommended)
 
 NAMESPACE=${NMS_NAMESPACE:-anemo-rhoai}
 PID_FILE="/tmp/rag-port-forwards.pid"

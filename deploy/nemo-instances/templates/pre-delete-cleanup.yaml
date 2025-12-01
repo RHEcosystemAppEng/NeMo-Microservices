@@ -118,9 +118,18 @@ spec:
             done
           done
           
-          # Wait for pods to terminate (with timeout)
-          echo "⏳ Waiting for pods to terminate..."
-          oc wait --for=delete pod --all -n "$NAMESPACE" --timeout=120s || echo "⚠️  Some pods may still be terminating (this is OK)"
+          # Wait for nemo-instances pods to terminate (with timeout)
+          # Only wait for pods with nemo-instances labels, not all pods in namespace
+          echo "⏳ Waiting for nemo-instances pods to terminate..."
+          INSTANCE_PODS=$(oc get pods -n "$NAMESPACE" -l app.kubernetes.io/instance=nemo-instances -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$INSTANCE_PODS" ]; then
+            for POD in $INSTANCE_PODS; do
+              echo "  - Waiting for pod: $POD"
+              oc wait --for=delete pod "$POD" -n "$NAMESPACE" --timeout=60s || echo "⚠️  Pod $POD may still be terminating (this is OK)"
+            done
+          else
+            echo "✅ No nemo-instances pods found"
+          fi
           
           # Clean up cluster-scoped resources that might block Helm uninstall
           echo "🧹 Cleaning up cluster-scoped resources..."
@@ -162,8 +171,19 @@ spec:
           
           # Check for and remove finalizers on deployments and other resources
           echo "🔍 Checking for finalizers on Helm-managed resources..."
-          for RESOURCE in deployment service replicaset; do
+          for RESOURCE in deployment service replicaset configmap secret; do
             RESOURCE_LIST=$(oc get $RESOURCE -l app.kubernetes.io/instance=nemo-instances -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+            if [ -z "$RESOURCE_LIST" ]; then
+              # Also check for resources with nemo-instances name patterns (for resources without labels)
+              case $RESOURCE in
+                configmap)
+                  RESOURCE_LIST=$(oc get $RESOURCE -n "$NAMESPACE" -o jsonpath='{.items[?(@.metadata.name=~"nemo-.*|llamastack.*")].metadata.name}' 2>/dev/null || echo "")
+                  ;;
+                secret)
+                  RESOURCE_LIST=$(oc get $RESOURCE -n "$NAMESPACE" -o jsonpath='{.items[?(@.metadata.name=~"nemo-ms-.*|wandb.*")].metadata.name}' 2>/dev/null || echo "")
+                  ;;
+              esac
+            fi
             for NAME in $RESOURCE_LIST; do
               FINALIZERS=$(oc get $RESOURCE "$NAME" -n "$NAMESPACE" -o jsonpath='{.metadata.finalizers[*]}' 2>/dev/null || echo "")
               if [ -n "$FINALIZERS" ]; then

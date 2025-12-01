@@ -228,7 +228,7 @@ guardrail:
 # ===== NIMCache Configuration =====
 # Model: meta/llama-3.2-1b-instruct:1.8.3 (exact from quickstart)
 nimCache:
-  enabled: true
+  enabled: false
   name: meta-llama3-1b-instruct
   modelPuller: nvcr.io/nim/meta/llama-3.2-1b-instruct:1.8.3
   engine: tensorrt_llm
@@ -254,7 +254,7 @@ nimCache:
 # ===== NIMPipeline Configuration =====
 # Model: nvcr.io/nim/meta/llama-3.2-1b-instruct:1.8.3 (exact from quickstart)
 nimPipeline:
-  enabled: true
+  enabled: false
   name: llama3-1b-pipeline
   serviceName: meta-llama3-1b-instruct
   image:
@@ -360,6 +360,19 @@ llamastack:
   inferenceModel: "meta/llama-3.2-1b-instruct"
   safetyModel: "meta/llama-3.2-1b-instruct"
   outputModelDir: "nvidia-e2e-tutorial/test-messages-model@v1"
+  # Service account name for LlamaStack (also used by InferenceService)
+  # This service account is created by Helm and can be used by InferenceService
+  # Format: <inferenceservice-name>-sa
+  # Example: anemo-rhoai-model-sa
+  serviceAccountName: "anemo-rhoai-model-sa"
+  # KServe InferenceService predictor service name (cluster-internal)
+  # This is the stable service name that routes to the latest revision
+  # Format: <inferenceservice-name>-predictor
+  # Example: anemo-rhoai-model-predictor
+  inferenceServicePredictor: "anemo-rhoai-model-predictor"
+  # Use Bearer token authentication instead of API key for KServe InferenceService
+  # Set to true when using KServe InferenceService that requires service account token
+  useBearerToken: true
   resources:
     requests:
       memory: "512Mi"

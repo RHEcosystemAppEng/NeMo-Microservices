@@ -32,7 +32,15 @@ providers:
       provider_type: remote::nvidia
       config:
         url: ${env.NVIDIA_BASE_URL:=https://integrate.api.nvidia.com}
+        {{- if .Values.llamastack.useBearerToken }}
+        # Use Bearer token authentication for KServe InferenceService
+        # Note: OpenAI client (used by NVIDIA provider) automatically formats api_key as "Bearer {api_key}"
+        # So we set the service account token as the api_key
+        api_key: ${env.NVIDIA_SERVICE_ACCOUNT_TOKEN}
+        {{- else }}
+        # Use API key authentication for NVIDIA API
         api_key: ${env.NVIDIA_API_KEY}
+        {{- end }}
         append_api_version: ${env.NVIDIA_APPEND_API_VERSION:=True}
   vector_io:
     - provider_id: faiss
