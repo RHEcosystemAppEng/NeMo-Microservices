@@ -143,6 +143,50 @@ oc get nemodatastore,nemoentitystore,nemocustomizer,nemoevaluator,nemoguardrail 
 
 ### 4. Deploy InferenceService Manually
 
+**⚠️ Important: Check GPU Taints First**
+
+If your cluster has GPU nodes with taints, you must add GPU tolerations to your InferenceService during deployment (or patch it immediately after). Otherwise, pods will be stuck in `Pending` state.
+
+**Check if GPU nodes have taints:**
+```bash
+# Check for GPU taints on nodes
+oc get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints | grep -E "gpu|GPU"
+
+# If you see taints like "g5-gpu=true:NoSchedule" or "nvidia.com/gpu=true:NoSchedule",
+# you need to add tolerations to your InferenceService (see below)
+```
+
+**If GPU taints exist, deploy InferenceService with tolerations:**
+
+When deploying your InferenceService (via NIMPipeline, YAML, etc.), include GPU tolerations in the spec:
+
+```yaml
+spec:
+  predictor:
+    tolerations:
+      - key: "g5-gpu"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+```
+
+**Or patch after deployment (if you forgot):**
+```bash
+# Add GPU tolerations to InferenceService (for both g5-gpu and nvidia.com/gpu taints)
+oc patch inferenceservice <inferenceservice-name> -n $NAMESPACE --type='merge' -p='{"spec":{"predictor":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}]}}}'
+
+# IMPORTANT: After patching, scale down old revision to 0
+oc get deployment -n $NAMESPACE | grep <inferenceservice-name>-predictor
+oc scale deployment <deployment-name-old> -n $NAMESPACE --replicas=0
+```
+
+**For more details, see [GPU Taints and Tolerations](#gpu-taints-and-tolerations) section.**
+
+---
+
 Deploy your InferenceService using your preferred method (NIMPipeline, direct YAML, etc.). The InferenceService will automatically create a service account named `<inferenceservice-name>-sa`.
 
 **Example**: If your InferenceService is named `anemo-rhoai-model`, the service account will be `anemo-rhoai-model-sa`.
@@ -283,6 +327,39 @@ oc exec -n $NAMESPACE $LLAMASTACK_POD -- curl -s -X POST http://localhost:8321/v
   -d '{"model":"nvidia/meta/llama-3.2-1b-instruct","messages":[{"role":"user","content":"test"}]}'
 ```
 
+## Manually deploy Workbench and apply Tolerations
+
+**⚠️ Important: Apply GPU Tolerations Before Running Demos**
+
+If your cluster has GPU nodes with taints and you want to run demos in a Workbench/Notebook, you must add GPU tolerations to the Workbench resource. Otherwise, the Workbench pod will be stuck in `Pending` state.
+
+**Check if GPU nodes have taints:**
+```bash
+# Check for GPU taints on nodes
+oc get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints | grep -E "gpu|GPU"
+```
+
+**If GPU taints exist, apply GPU tolerations to Workbench:**
+
+```bash
+# Patch Notebook/Workbench CR to add GPU tolerations (for both g5-gpu and nvidia.com/gpu taints)
+oc patch notebook <notebook-name> -n $NAMESPACE --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}]}}}}'
+
+# Example (replace with your actual notebook name and namespace):
+# oc patch notebook anemo-rhoai-wb -n anemo-rhoai --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}]}}}}'
+
+# Find your notebook name:
+oc get notebook -n $NAMESPACE
+
+# Delete the pending pod to trigger recreation with new tolerations
+oc delete pod <pod-name-pending> -n $NAMESPACE
+
+# Verify the pod is scheduled and running
+oc get pod <pod-name> -n $NAMESPACE -o wide
+```
+
+**For more details, see [GPU Taints and Tolerations](#gpu-taints-and-tolerations) section.**
+
 ## Running RAG Demo
 
 ### 1. Configure RAG Demo
@@ -360,6 +437,11 @@ JUPYTER_POD=$(oc get pods -n $NAMESPACE -l app=jupyter-notebook -o jsonpath='{.i
 oc cp llm-as-a-judge-tutorial.ipynb $JUPYTER_POD:/work -n $NAMESPACE
 oc cp config.py $JUPYTER_POD:/work -n $NAMESPACE
 oc cp env.donotcommit $JUPYTER_POD:/work -n $NAMESPACE
+
+# Copy data directory (if it exists)
+if [ -d "data" ]; then
+  oc cp data $JUPYTER_POD:/work -n $NAMESPACE
+fi
 
 # Port-forward Jupyter
 oc port-forward -n $NAMESPACE svc/jupyter-service 8888:8888
