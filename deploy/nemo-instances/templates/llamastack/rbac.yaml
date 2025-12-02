@@ -1,0 +1,33 @@
+{{- if and .Values.llamastack.enabled .Values.llamastack.useBearerToken }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Values.llamastack.serviceAccountName }}-token-reader
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  resourceNames: ["{{ .Values.llamastack.serviceAccountName }}-token-secret"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Values.llamastack.serviceAccountName }}-token-reader
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.llamastack.serviceAccountName }}
+  namespace: {{ .Values.namespace.name }}
+roleRef:
+  kind: Role
+  name: {{ .Values.llamastack.serviceAccountName }}-token-reader
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

@@ -376,11 +376,14 @@ llamastack:
   inferenceModel: "meta/llama-3.2-1b-instruct"
   safetyModel: "meta/llama-3.2-1b-instruct"
   outputModelDir: "nvidia-e2e-tutorial/test-messages-model@v1"
-  # Service account name for LlamaStack (also used by InferenceService)
-  # This service account is created by Helm and can be used by InferenceService
+  # Service account name for LlamaStack (typically created by InferenceService)
   # Format: <inferenceservice-name>-sa
   # Example: anemo-rhoai-model-sa
+  # Set this to match your InferenceService's service account name
   serviceAccountName: "anemo-rhoai-model-sa"
+  # Whether to create the service account (set to false if InferenceService creates it)
+  # Default: false (InferenceService typically creates the service account)
+  createServiceAccount: false
   # KServe InferenceService predictor service name (cluster-internal)
   # This is the stable service name that routes to the latest revision
   # Format: <inferenceservice-name>-predictor

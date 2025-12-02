@@ -132,6 +132,20 @@ spec:
           check_secret "wandb-secret" "optional" "WandB Secret"
           echo ""
           
+          # Check LlamaStack service account (if LlamaStack is enabled)
+          {{- if and .Values.llamastack.enabled .Values.llamastack.useBearerToken }}
+          echo "📋 Checking LlamaStack Service Account:"
+          SA_NAME="{{ .Values.llamastack.serviceAccountName }}"
+          echo -n "  Checking LlamaStack service account ($SA_NAME)... "
+          if oc get sa "$SA_NAME" -n "$NAMESPACE" >/dev/null 2>&1; then
+            echo "✅ Found"
+          else
+            echo "⚠️  Not found (will be created by Helm)"
+            # Don't fail - Helm will create it
+          fi
+          echo ""
+          {{- end }}
+          
           # Final validation
           if [ $ERRORS -gt 0 ]; then
             echo "❌ Validation FAILED: $ERRORS required secret(s) missing"
@@ -159,6 +173,8 @@ spec:
           fi
 ---
 # ServiceAccount and RBAC for validation hook
+# These must be created BEFORE the validation Job hook runs
+# Using hook-weight -20 to ensure they're created before the Job (which uses -10)
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -167,6 +183,10 @@ metadata:
   labels:
     component: validation
     app.kubernetes.io/name: nemo-instances
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-20"
+    "helm.sh/hook-delete-policy": before-hook-creation
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -176,6 +196,10 @@ metadata:
   labels:
     component: validation
     app.kubernetes.io/name: nemo-instances
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-20"
+    "helm.sh/hook-delete-policy": before-hook-creation
 rules:
 - apiGroups: [""]
   resources: ["secrets"]
@@ -189,6 +213,10 @@ metadata:
   labels:
     component: validation
     app.kubernetes.io/name: nemo-instances
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-20"
+    "helm.sh/hook-delete-policy": before-hook-creation
 subjects:
 - kind: ServiceAccount
   name: nemo-instances-validation

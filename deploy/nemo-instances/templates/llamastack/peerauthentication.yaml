@@ -1,0 +1,19 @@
+{{- if .Values.llamastack.enabled }}
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: {{ .Values.llamastack.name }}-permissive
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    component: llamastack
+spec:
+  selector:
+    matchLabels:
+      app: nemo-llamastack
+  mtls:
+    mode: PERMISSIVE
+{{- end }}
+
