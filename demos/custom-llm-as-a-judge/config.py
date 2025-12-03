@@ -1,5 +1,5 @@
 # (Required) NeMo Microservices URLs
-# Auto-detect if running locally (via port-forward) or in cluster
+# Cluster mode only - runs in Workbench/Notebook within the cluster
 import os
 from pathlib import Path
 
@@ -25,46 +25,19 @@ except ImportError:
 # Default is provided for convenience, but should be set in env.donotcommit file
 NMS_NAMESPACE = os.getenv("NMS_NAMESPACE", "anemo-rhoai")
 
-# Determine if running locally or in cluster
-# If RUN_LOCALLY env var is explicitly set, use it
-# Otherwise, try to auto-detect by checking if we can resolve cluster DNS
-RUN_LOCALLY_ENV = os.getenv("RUN_LOCALLY")
-if RUN_LOCALLY_ENV is not None:
-    RUN_LOCALLY = RUN_LOCALLY_ENV.lower() == "true"
-else:
-    # Auto-detect: try to resolve cluster DNS to determine if we're in-cluster
-    import socket
-    try:
-        # Try to resolve a cluster-internal service name
-        test_host = f"nemodatastore-sample.{NMS_NAMESPACE}.svc.cluster.local"
-        socket.gethostbyname(test_host)
-        # If resolution succeeds, we're likely in-cluster
-        RUN_LOCALLY = False
-    except (socket.gaierror, OSError):
-        # If DNS resolution fails, we're likely running locally
-        RUN_LOCALLY = True
-
 # External NIM service variables (always defined for compatibility)
 # These are used for Knative InferenceService (not recommended due to URL stripping issues)
 EXTERNAL_NIM_SERVICE = os.getenv("EXTERNAL_NIM_SERVICE", "anemo-rhoai-predictor-00002")
 EXTERNAL_NIM_NAMESPACE = os.getenv("EXTERNAL_NIM_NAMESPACE", NMS_NAMESPACE)
 EXTERNAL_NIM_PORT = os.getenv("EXTERNAL_NIM_PORT", "80")
 
-if RUN_LOCALLY:
-    # Localhost URLs (for port-forwarding from local machine)
-    NDS_URL = "http://localhost:8001"  # Data Store
-    ENTITY_STORE_URL = "http://localhost:8002"  # Entity Store
-    EVALUATOR_URL = "http://localhost:8004"  # Evaluator
-    NIM_URL = "http://localhost:8006"  # NIM (optional, for target model)
-    LLAMASTACK_URL = "http://localhost:8321"  # LlamaStack Server
-else:
-    # Cluster-internal URLs (for running from within cluster)
-    NDS_URL = f"http://nemodatastore-sample.{NMS_NAMESPACE}.svc.cluster.local:8000"
-    ENTITY_STORE_URL = f"http://nemoentitystore-sample.{NMS_NAMESPACE}.svc.cluster.local:8000"
-    EVALUATOR_URL = f"http://nemoevaluator-sample.{NMS_NAMESPACE}.svc.cluster.local:8000"
-    # External NIM service (if using external NIM - not recommended, use STANDARD_NIM_SERVICE instead)
-    NIM_URL = f"http://{EXTERNAL_NIM_SERVICE}.{EXTERNAL_NIM_NAMESPACE}.svc.cluster.local:{EXTERNAL_NIM_PORT}"
-    LLAMASTACK_URL = f"http://llamastack.{NMS_NAMESPACE}.svc.cluster.local:8321"  # LlamaStack Server
+# Cluster-internal URLs (for running from within cluster Workbench/Notebook)
+NDS_URL = f"http://nemodatastore-sample.{NMS_NAMESPACE}.svc.cluster.local:8000"
+ENTITY_STORE_URL = f"http://nemoentitystore-sample.{NMS_NAMESPACE}.svc.cluster.local:8000"
+EVALUATOR_URL = f"http://nemoevaluator-sample.{NMS_NAMESPACE}.svc.cluster.local:8000"
+# External NIM service (if using external NIM - not recommended, use STANDARD_NIM_SERVICE instead)
+NIM_URL = f"http://{EXTERNAL_NIM_SERVICE}.{EXTERNAL_NIM_NAMESPACE}.svc.cluster.local:{EXTERNAL_NIM_PORT}"
+LLAMASTACK_URL = f"http://llamastack.{NMS_NAMESPACE}.svc.cluster.local:8321"  # LlamaStack Server
 
 # For evaluation jobs, use NEMO_URL which points to Evaluator
 # The notebook uses NEMO_URL for Evaluator endpoints

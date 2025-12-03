@@ -115,17 +115,17 @@ oc get pod -n <your-namespace> -l app=nemo-llamastack -o jsonpath='{.items[0].sp
 
 ## Quick Start
 
-### Option A: Run in Cluster (Recommended - Most Reliable)
+### Run in Workbench/Notebook (Cluster Mode)
 
-Running the notebook inside the cluster is more reliable than port-forwards:
+The notebook runs in a Workbench/Notebook within the cluster and uses cluster-internal service URLs.
 
-1. **Copy the notebook to the cluster Jupyter pod:**
+1. **Copy the notebook to the Workbench/Notebook pod:**
 
 ```bash
 # Replace <your-namespace> with your actual namespace (find with: oc projects)
 NAMESPACE=<your-namespace>
 
-# Get the Jupyter pod name
+# Get the Workbench/Notebook pod name
 JUPYTER_POD=$(oc get pods -n $NAMESPACE -l app=jupyter-notebook -o jsonpath='{.items[0].metadata.name}')
 
 # Copy the RAG demo files to the pod
@@ -135,37 +135,21 @@ oc cp demos/rag/requirements.txt $JUPYTER_POD:/work -n $NAMESPACE
 oc cp demos/rag/env.donotcommit.example $JUPYTER_POD:/work -n $NAMESPACE
 ```
 
-2. **Access Jupyter in the cluster:**
+2. **Access Workbench/Notebook in the cluster:**
 
 ```bash
-# Port-forward Jupyter (one port-forward is more reliable than five)
+# Port-forward Workbench/Notebook
 # Replace <your-namespace> with your actual namespace
 oc port-forward -n <your-namespace> svc/jupyter-service 8888:8888
 ```
 
-3. **Open Jupyter in browser:** http://localhost:8888 (token: `token`)
+3. **Open Workbench/Notebook in browser:** http://localhost:8888 (token: `token`)
 
 4. **Install dependencies in the notebook:**
 
-The notebook will auto-detect cluster mode and use cluster-internal service URLs. No port-forwards needed!
+The notebook uses cluster-internal service URLs automatically. No port-forwards needed for services!
 
-### Option B: Run Locally (Requires Port-Forwards)
-
-**⚠️ Note:** Port-forwards can be unreliable. They may die if:
-- Network connection drops
-- Pods restart
-- Connection times out
-
-For better reliability, use Option A (run in-cluster).
-
-1. **Install Dependencies**
-
-```bash
-cd NeMo-Microservices/demos/rag
-pip install -r requirements.txt
-```
-
-2. **Configure Environment**
+5. **Configure Environment**
 
 **🔒 SECURITY**: This demo uses `env.donotcommit` file for sensitive configuration. The file is git-ignored and will NOT be committed.
 
@@ -207,7 +191,6 @@ oc get inferenceservice <your-inferenceservice-name> -n <your-namespace> -o json
 ```
 
 **Optional Configuration:**
-- `RUN_LOCALLY=false` - Set to `true` only if running locally with port-forwards
 - `NDS_TOKEN=token` - NeMo Data Store token (default: "token")
 - `DATASET_NAME=rag-tutorial-documents` - Dataset name for RAG documents
 - `RAG_TOP_K=5` - Number of documents to retrieve
@@ -223,70 +206,23 @@ oc get svc -n <your-namespace> | grep predictor
 oc get svc -n <your-namespace> | grep embedqa
 ```
 
-3. **Set Up Port-Forwards**
-
-Run the improved port-forward script (monitors and reports issues):
-
-```bash
-./port-forward.sh
-```
-
-Or manually in separate terminals (more reliable):
-```bash
-# Replace <your-namespace> with your actual namespace
-# Replace <your-chat-nim-service> with your actual Chat NIM service name (find with: oc get svc -n <namespace> | grep llama)
-
-# Terminal 1
-oc port-forward -n <your-namespace> svc/nemodatastore-sample 8001:8000
-
-# Terminal 2
-oc port-forward -n <your-namespace> svc/nemoentitystore-sample 8002:8000
-
-# Terminal 3
-oc port-forward -n <your-namespace> svc/nemoguardrails-sample 8005:8000
-
-# Terminal 4 (Chat NIM - service name may vary)
-oc port-forward -n <your-namespace> svc/<your-chat-nim-service> 8006:8000
-
-# Terminal 5
-oc port-forward -n <your-namespace> svc/nv-embedqa-1b-v2 8007:8000
-
-# Terminal 6 (for LlamaStack)
-oc port-forward -n <your-namespace> svc/llamastack 8321:8321
-```
-
-4. **Run the Notebook**
-
-```bash
-jupyter lab rag-tutorial.ipynb
-```
-
 ## Configuration
 
-The notebook uses `config.py` which automatically:
-- Detects if running locally (port-forward) or in cluster
-- Sets up service URLs accordingly
+The notebook uses `config.py` which:
+- Sets up cluster-internal service URLs automatically
 - Loads configuration from `env.donotcommit` file (git-ignored, secure)
 
 **🔒 Security**: All sensitive values (tokens, API keys) are loaded from `env.donotcommit` file, which is git-ignored and will NOT be committed to version control.
 
 ### Service URLs
 
-**Cluster Mode** (default):
+**Cluster Mode** (Workbench/Notebook within cluster):
 - Data Store: `http://nemodatastore-sample.{namespace}.svc.cluster.local:8000`
 - Entity Store: `http://nemoentitystore-sample.{namespace}.svc.cluster.local:8000`
 - Guardrails: `http://nemoguardrails-sample.{namespace}.svc.cluster.local:8000`
 - Chat NIM: `http://meta-llama3-1b-instruct.{namespace}.svc.cluster.local:8000`
 - Embedding NIM: `http://nv-embedqa-1b-v2.{namespace}.svc.cluster.local:8000`
 - LlamaStack: `http://llamastack.{namespace}.svc.cluster.local:8321`
-
-**Local Mode** (with port-forwards):
-- Data Store: `http://localhost:8001`
-- Entity Store: `http://localhost:8002`
-- Guardrails: `http://localhost:8005`
-- Chat NIM: `http://localhost:8006`
-- Embedding NIM: `http://localhost:8007`
-- LlamaStack: `http://localhost:8321`
 
 ## RAG Workflow
 
@@ -361,8 +297,7 @@ If the embedding NIM service is not deployed:
 - Verify all services are running: `oc get pods -n <your-namespace>`
 - Check service URLs in `config.py` match your deployment
 - Verify `env.donotcommit` file exists and has correct `NMS_NAMESPACE` value
-- Ensure port-forwards are active (if running locally)
-- **Port-forwards died?** They can be unreliable. Consider running the notebook in-cluster instead (Option A above)
+- Ensure you're running the notebook in a Workbench/Notebook within the cluster
 
 ### LlamaStack Connection Errors
 
@@ -402,18 +337,6 @@ oc exec -n <your-namespace> <llamastack-pod> -- curl -s http://<predictor-servic
 
 6. **Fallback works:** If LlamaStack fails, the notebook automatically falls back to direct NIM calls using the external HTTPS URL with the service account token.
 
-### Port-Forward Issues
-
-Port-forwards can be inconsistent because:
-- They die when network connections drop
-- They need restarting if pods restart
-- Background processes can exit silently
-
-**Solutions:**
-1. **Best:** Run notebook in-cluster (Option A) - no port-forwards needed
-2. **Alternative:** Run port-forwards in separate terminal windows (more visible)
-3. **Monitor:** Use the improved `port-forward.sh` script which monitors and reports issues
-
 ## Version Compatibility
 
 - **NeMo Data Store**: v25.08+
@@ -440,9 +363,8 @@ This demo uses **LlamaStack** for chat completions, providing a unified API abst
 ## Files
 
 - `rag-tutorial.ipynb` - Main tutorial notebook
-- `config.py` - Configuration file (auto-detects local vs cluster, includes LlamaStack URL)
+- `config.py` - Configuration file (cluster mode, includes LlamaStack URL)
 - `requirements.txt` - Python dependencies (includes llama-stack-client)
-- `port-forward.sh` - Port-forward script for local development
 - `../../commands.md` - Quick command reference guide (concise version without detailed explanations)
 - `env.donotcommit.example` - Template for environment configuration (copy to `env.donotcommit`)
 

@@ -1,6 +1,6 @@
 # NeMo Infrastructure Components Helm Chart
 
-A Helm chart for deploying NVIDIA NeMo infrastructure components on OpenShift, including PostgreSQL databases, MLflow, Argo Workflows, Milvus, OpenTelemetry, MinIO, Jupyter Notebook, and Volcano Scheduler.
+A Helm chart for deploying NVIDIA NeMo infrastructure components on OpenShift, including PostgreSQL databases, MLflow, Argo Workflows, Milvus, OpenTelemetry, MinIO, and Volcano Scheduler.
 
 ## Table of Contents
 
@@ -60,7 +60,6 @@ This Helm chart deploys all infrastructure components required for NVIDIA NeMo m
 | **Customizer Components** | PostgreSQL, MLflow, and OpenTelemetry Collector for NeMo Customizer microservice |
 | **Guardrail PostgreSQL** | Database for NeMo Guardrail microservice |
 | **Evaluator Components** | PostgreSQL, Argo Workflows, Milvus, and OpenTelemetry Collector for NeMo Evaluator microservice |
-| **Jupyter Notebook** | Jupyter Notebook server for NeMo development and testing |
 | **MinIO** | Object storage for MLflow artifacts and other data |
 | **Volcano Scheduler** | Advanced scheduler for Kubernetes workloads, required for NeMo Operator |
 
@@ -80,7 +79,7 @@ helm install nemo-infra . -n <namespace> --create-namespace
 
 **Verify installation:**
 ```bash
-oc get pods -n <namespace> | grep -E "(postgresql|mlflow|volcano|argo|milvus|opentelemetry|jupyter|minio)"
+oc get pods -n <namespace> | grep -E "(postgresql|mlflow|volcano|argo|milvus|opentelemetry|minio)"
 ```
 
 ## Configuration
@@ -103,7 +102,6 @@ install:
   customizer: true     # Customizer (PostgreSQL, MLflow, OpenTelemetry)
   guardrail: true      # Guardrail PostgreSQL
   evaluator: true      # Evaluator (PostgreSQL, Argo, Milvus, OpenTelemetry)
-  jupyter: true        # Jupyter Notebook
   volcano: true        # Volcano Scheduler
 ```
 
@@ -246,7 +244,6 @@ oc logs <postgresql-pod> -n <namespace>
 **Configured SCCs:**
 
 1. **anyuid** - Used by:
-   - Jupyter Notebook
    - Milvus
 
 2. **privileged** - Used by:
@@ -346,7 +343,6 @@ nemo-infra/
 ├── templates/
 │   ├── _helpers.tpl        # Template helpers
 │   ├── namespace.yaml      # Namespace resource
-│   ├── jupyter/            # Jupyter Notebook templates
 │   ├── evaluator/          # Evaluator component templates
 │   └── volcano/            # Volcano-specific templates
 │       ├── oc-rbac.yaml    # OpenShift RBAC configuration
@@ -379,8 +375,6 @@ This deployment on OpenShift is inspired by Nvidia's [k8s-nim-operator](https://
 | **MinIO** | `minio/minio:latest` (in mlflow.yaml) | `quay.io/minio/minio:latest` | Changed to explicit `quay.io` registry for OpenShift compatibility |
 | **MLflow PostgreSQL** | `bitnami/postgresql:latest` (in mlflow.yaml) | `registry-1.docker.io/bitnami/postgresql:latest` | Added explicit `registry-1.docker.io` registry prefix |
 | **OpenTelemetry Collector** | `otel/opentelemetry-collector-k8s:0.102.1` | `otel/opentelemetry-collector-k8s:0.102.1` | No change - same version |
-| **Jupyter Notebook** | `jupyter/base-notebook:latest` | `jupyter/base-notebook:latest` | No change - same image |
-| **Jupyter Init Container** | `busybox` (no tag) | `busybox` (no tag) | No change - same image |
 | **OpenShift CLI** | ❌ Not present in v3.0.0 | `registry.redhat.io/openshift4/ose-cli:latest` | **NEW** - Added for Volcano webhook patching jobs |
 
 ### Summary of Changes

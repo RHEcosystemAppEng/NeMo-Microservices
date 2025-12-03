@@ -372,10 +372,9 @@ Edit `env.donotcommit` and set:
 ```bash
 NMS_NAMESPACE=<namespace>
 NIM_SERVICE_ACCOUNT_TOKEN=<service-account-token>
-RUN_LOCALLY=false  # Set to true only if running locally with port-forwards
 ```
 
-### 2. Run in Cluster (Recommended)
+### 2. Run in Workbench/Notebook (Cluster Mode)
 ```bash
 # Get Jupyter pod name
 JUPYTER_POD=$(oc get pods -n $NAMESPACE -l app=jupyter-notebook -o jsonpath='{.items[0].metadata.name}')
@@ -390,19 +389,6 @@ oc port-forward -n $NAMESPACE svc/jupyter-service 8888:8888
 ```
 
 Access: http://localhost:8888 (token: `token`)
-
-### 3. Run Locally (Requires Port-Forwards)
-```bash
-# Set up port-forwards (run in separate terminals or use port-forward.sh script)
-oc port-forward -n $NAMESPACE svc/nemodatastore-sample 8001:8000 &
-oc port-forward -n $NAMESPACE svc/nemoentitystore-sample 8002:8000 &
-oc port-forward -n $NAMESPACE svc/nemoguardrails-sample 8005:8000 &
-oc port-forward -n $NAMESPACE svc/nv-embedqa-1b-v2 8007:8000 &
-oc port-forward -n $NAMESPACE svc/llamastack 8321:8321 &
-
-# Run notebook
-jupyter lab rag-tutorial.ipynb
-```
 
 ## Running LLM-as-a-Judge Demo
 
@@ -420,7 +406,6 @@ NIM_MODEL_SERVING_SERVICE=<inferenceservice-name>
 NIM_MODEL_SERVING_URL_EXTERNAL=<inferenceservice-url>
 USE_NIM_MODEL_SERVING=true
 USE_EXTERNAL_URL=true
-RUN_LOCALLY=false  # Set to true only if running locally with port-forwards
 ```
 
 **Find your InferenceService name:**
@@ -428,7 +413,7 @@ RUN_LOCALLY=false  # Set to true only if running locally with port-forwards
 oc get inferenceservice -n $NAMESPACE
 ```
 
-### 2. Run in Cluster (Recommended)
+### 2. Run in Workbench/Notebook (Cluster Mode)
 ```bash
 # Get Jupyter pod name
 JUPYTER_POD=$(oc get pods -n $NAMESPACE -l app=jupyter-notebook -o jsonpath='{.items[0].metadata.name}')
@@ -448,18 +433,6 @@ oc port-forward -n $NAMESPACE svc/jupyter-service 8888:8888
 ```
 
 Access: http://localhost:8888 (token: `token`)
-
-### 3. Run Locally (Requires Port-Forwards)
-```bash
-# Set up port-forwards
-oc port-forward -n $NAMESPACE svc/nemodatastore-sample 8001:8000 &
-oc port-forward -n $NAMESPACE svc/nemoentitystore-sample 8002:8000 &
-oc port-forward -n $NAMESPACE svc/nemoevaluator-sample 8004:8000 &
-oc port-forward -n $NAMESPACE svc/llamastack 8321:8321 &
-
-# Run notebook
-jupyter lab llm-as-a-judge-tutorial.ipynb
-```
 
 ## GPU Taints and Tolerations
 
@@ -673,7 +646,15 @@ helm uninstall nemo-infra -n $NAMESPACE
 echo "🧹 Cleaning up orphaned resources..."
 
 # Delete any remaining Custom Resources (orphans)
-oc delete nemocustomizer,nemodatastore,nemoentitystore,nemoevaluator,nemoguardrail,nimcache,nimpipeline,inferenceservice --all -n $NAMESPACE --ignore-not-found=true --wait=false
+# Note: NIMService resources may have finalizers - remove them first if deletion fails
+oc delete nemocustomizer,nemodatastore,nemoentitystore,nemoevaluator,nemoguardrail,nimcache,nimpipeline,nimservice,inferenceservice --all -n $NAMESPACE --ignore-not-found=true --wait=false
+
+# If NIMService deletion fails due to finalizers, remove them manually:
+for NIMSERVICE in $(oc get nimservice -n $NAMESPACE -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+  echo "Removing finalizers from NIMService: $NIMSERVICE"
+  oc patch nimservice $NIMSERVICE -n $NAMESPACE -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
+  oc delete nimservice $NIMSERVICE -n $NAMESPACE --ignore-not-found=true --wait=false
+done
 
 # Delete orphaned deployments, replicasets, services, pods, jobs
 oc delete deployment,replicaset,service,pod,job -l app.kubernetes.io/instance=nemo-instances -n $NAMESPACE --ignore-not-found=true --wait=false

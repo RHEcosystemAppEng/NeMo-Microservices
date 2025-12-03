@@ -1,7 +1,8 @@
 # NeMo Samples Helm Chart Values
 # Following quickstart Step 6 (lines 152-164)
-# Deploys 7 custom resources: NemoCustomizer, NemoDatastore, NemoEntitystore,
-# NemoEvaluator, NemoGuardrail, NIMCache, NIMPipeline
+# Deploys custom resources: NemoCustomizer, NemoDatastore, NemoEntitystore,
+# NemoEvaluator, NemoGuardrail, NIMCache (embedding), NIMPipeline (embedding)
+# Note: Chat models are deployed via RHOAI/OpenShift AI NIM Serving Runtime Model (KServe InferenceService)
 
 # Installation namespace
 namespace:
@@ -207,12 +208,22 @@ evaluator:
     # exporterOtlpEndpoint will be templated in the template file
   # Environment variables for the evaluator pod
   # NIM_PROXY_URL points to the NIM service for evaluation jobs
-  # The URL will be automatically constructed using nimPipeline.serviceName and namespace.name in the template
+  # Configure via evaluator.nimProxy section below (for NIM deployed via RHOAI/OpenShift AI)
   env:
     - name: NIM_PROXY_URL
-      # Service name matches nimPipeline.serviceName (meta-llama3-1b-instruct)
-      # Template will construct: http://<nimPipeline.serviceName>.<namespace.name>.svc.cluster.local:8000
+      # Will be templated in nemoevaluator.yaml using evaluator.nimProxy configuration
       value: ""  # Will be templated in nemoevaluator.yaml
+  # NIM Proxy configuration (for NIM deployed via RHOAI/OpenShift AI KServe InferenceService)
+  # If not set, defaults to meta-llama3-1b-instruct service
+  nimProxy:
+    # Service name (e.g., meta-llama3-1b-instruct-predictor for KServe InferenceService)
+    serviceName: ""
+    # Service suffix (e.g., "-predictor" for KServe InferenceService)
+    serviceSuffix: ""
+    # Namespace (defaults to namespace.name if not set)
+    namespace: ""
+    # Path (e.g., "/v1" for KServe InferenceService)
+    path: ""
   replicas: 1
 
 # ===== NemoGuardrail Configuration =====
@@ -235,6 +246,17 @@ guardrail:
     name: "pvc-guardrail-config"
     create: true
     size: "1Gi"
+  # NIM endpoint configuration (for NIM deployed via RHOAI/OpenShift AI KServe InferenceService)
+  # If not set, defaults to meta-llama3-1b-instruct service
+  nimEndpoint:
+    # Service name (e.g., meta-llama3-1b-instruct-predictor for KServe InferenceService)
+    serviceName: ""
+    # Service suffix (e.g., "-predictor" for KServe InferenceService)
+    serviceSuffix: ""
+    # Namespace (defaults to namespace.name if not set)
+    namespace: ""
+    # Port (defaults to 80 for KServe InferenceService)
+    port: ""
   replicas: 1
   resources:
     limits:
@@ -242,56 +264,17 @@ guardrail:
       ephemeral-storage: 10Gi
 
 # ===== NIMCache Configuration =====
-# Model: meta/llama-3.2-1b-instruct:1.8.3 (exact from quickstart)
-nimCache:
-  enabled: false
-  name: meta-llama3-1b-instruct
-  modelPuller: nvcr.io/nim/meta/llama-3.2-1b-instruct:1.8.3
-  engine: tensorrt_llm
-  tensorParallelism: "1"
-  pullSecret: ngc-secret
-  authSecret: ngc-api-secret
-  # OpenShift-compatible UIDs (required for nonroot SCC)
-  # Range: 1000790000-1000799999
-  userID: 1000790000
-  groupID: 1000790000
-  pvc:
-    create: true
-    size: "50Gi"
-  tolerations:
-    - key: "g5-gpu"
-      operator: "Equal"
-      value: "true"
-      effect: "NoSchedule"
-    - key: "nvidia.com/gpu"
-      operator: "Exists"
-      effect: "NoSchedule"
+# REMOVED: Chat model NIMCache is no longer deployed via Helm chart
+# Chat models (e.g., meta/llama-3.2-1b-instruct) are now deployed via RHOAI/OpenShift AI 
+# NIM Serving Runtime Model (KServe InferenceService), which handles model caching internally.
+# Only embedding model NIMCache (nimCacheEmbedding) is deployed via Helm chart.
+# If you need to deploy chat model NIMCache via Helm, configure it separately.
 
 # ===== NIMPipeline Configuration =====
-# Model: nvcr.io/nim/meta/llama-3.2-1b-instruct:1.8.3 (exact from quickstart)
-nimPipeline:
-  enabled: false
-  name: llama3-1b-pipeline
-  serviceName: meta-llama3-1b-instruct
-  image:
-    repository: nvcr.io/nim/meta/llama-3.2-1b-instruct
-    tag: 1.8.3
-    pullPolicy: IfNotPresent
-  pullSecret: ngc-secret
-  authSecret: ngc-api-secret
-  nimCacheName: meta-llama3-1b-instruct
-  replicas: 1
-  resources:
-    limits:
-      gpu: 1
-  tolerations:
-    - key: "g5-gpu"
-      operator: "Equal"
-      value: "true"
-      effect: "NoSchedule"
-    - key: "nvidia.com/gpu"
-      operator: "Exists"
-      effect: "NoSchedule"
+# REMOVED: NIM Pipeline is no longer deployed via Helm chart
+# Models are now deployed via RHOAI/OpenShift AI NIM Serving Runtime Model (KServe InferenceService)
+# If you need to deploy NIM models via Helm, use the embedding pipeline (nimPipelineEmbedding) or
+# configure your own NIMPipeline resources separately.
 
 # ===== NIMCache Embedding Configuration =====
 # Model: nvcr.io/nim/nvidia/llama-3.2-nv-embedqa-1b-v2:1.3.1 (embedding model for RAG)

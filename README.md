@@ -49,12 +49,11 @@ helm install nemo-infra . \
 
 **Verify installation:**
 ```bash
-oc get pods -n <namespace> | grep -E "(postgresql|mlflow|volcano|argo|milvus|opentelemetry|jupyter|minio)"
+oc get pods -n <namespace> | grep -E "(postgresql|mlflow|volcano|argo|milvus|opentelemetry|minio)"
 ```
 
 **Expected Output:**
 ```
-jupyter-notebook-5fc745674d-9gq29                                1/1     Running     0          175m
 nemo-infra-argo-workflows-server-6ccf84f45d-rnvxg                1/1     Running     0          175m
 nemo-infra-argo-workflows-workflow-controller-68d456d755-hds5p   1/1     Running     0          175m
 nemo-infra-customizer-mlflow-tracking-6787ff598-fjmmr            1/1     Running     0          175m
@@ -358,10 +357,6 @@ This repository includes several demo notebooks and tutorials:
 3. **LlamaStack Demo** - [`demos/llamastack/`](demos/llamastack/)
    - End-to-end flow using LlamaStack for unified API access
    - 📖 [Full documentation](demos/llamastack/README.md)
-
-4. **Jupyter Notebook Demo** - [`demos/jupyter-notebook/`](demos/jupyter-notebook/)
-   - Example notebook for NeMo Microservices
-   - 📖 [Full documentation](demos/jupyter-notebook/README.md)
 
 ### Quick Command Reference
 

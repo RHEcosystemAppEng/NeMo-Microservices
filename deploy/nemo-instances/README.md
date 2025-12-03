@@ -16,8 +16,10 @@ This chart installs the NeMo and NIM operators, then deploys 7 custom resources 
 - **NemoEntitystore**: Entity and model metadata management
 - **NemoEvaluator**: Model evaluation and benchmarking service
 - **NemoGuardrail**: Safety and content filtering service
-- **NIMCache**: Model caching (meta-llama3-1b-instruct)
-- **NIMPipeline**: Inference pipeline for Llama 3.2 1B model
+- **NIMCache**: Model caching for embedding model (nv-embedqa-1b-v2)
+  - Note: Chat model caching is handled by RHOAI/OpenShift AI NIM Serving Runtime Model
+- **NIMPipeline**: Inference pipeline for embedding model (nv-embedqa-1b-v2)
+  - Note: Chat models (e.g., meta/llama-3.2-1b-instruct) are deployed via RHOAI/OpenShift AI NIM Serving Runtime Model (KServe InferenceService), not via Helm chart
 
 ## Prerequisites
 
@@ -232,11 +234,13 @@ After deployment, services are available at:
 - `http://nemoentitystore-sample.<namespace>.svc.cluster.local:8000`
 - `http://nemoevaluator-sample.<namespace>.svc.cluster.local:8000`
 - `http://nemoguardrails-sample.<namespace>.svc.cluster.local:8000`
-- `http://meta-llama3-1b-instruct.<namespace>.svc.cluster.local:8000`
+- `http://nv-embedqa-1b-v2.<namespace>.svc.cluster.local:8000` (embedding model)
+- Chat models are deployed via RHOAI/OpenShift AI (KServe InferenceService)
 
 ## GPU Requirements
 
-- **NIMCache** and **NIMPipeline** require GPU nodes
+- **NIMCache** and **NIMPipeline** (embedding model) require GPU nodes
+  - Note: Chat models are deployed via RHOAI/OpenShift AI, not via Helm chart
 - GPU tolerations are pre-configured for:
   - `g5-gpu` taint
   - `nvidia.com/gpu` taint

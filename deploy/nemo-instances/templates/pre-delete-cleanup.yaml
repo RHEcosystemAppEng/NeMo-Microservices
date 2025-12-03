@@ -75,8 +75,8 @@ spec:
           # Delete NeMo Custom Resources
           delete_crs_with_finalizer_handling "nemocustomizer,nemodatastore,nemoentitystore,nemoevaluator,nemoguardrail" "NeMo"
           
-          # Delete NIM Custom Resources
-          delete_crs_with_finalizer_handling "nimcache,nimpipeline" "NIM"
+          # Delete NIM Custom Resources (including NIMService)
+          delete_crs_with_finalizer_handling "nimcache,nimpipeline,nimservice" "NIM"
           
           # Wait for CRs to be deleted (with timeout)
           echo "⏳ Waiting for Custom Resources to be deleted..."
@@ -86,7 +86,7 @@ spec:
           MAX_WAIT=120
           ELAPSED=0
           while [ $ELAPSED -lt $MAX_WAIT ]; do
-            CR_COUNT=$(oc get nemocustomizer,nemodatastore,nemoentitystore,nemoevaluator,nemoguardrail,nimcache,nimpipeline -n "$NAMESPACE" 2>/dev/null | tail -n +2 | wc -l || echo "0")
+            CR_COUNT=$(oc get nemocustomizer,nemodatastore,nemoentitystore,nemoevaluator,nemoguardrail,nimcache,nimpipeline,nimservice -n "$NAMESPACE" 2>/dev/null | tail -n +2 | wc -l || echo "0")
             if [ "$CR_COUNT" -eq 0 ]; then
               echo "✅ All Custom Resources deleted"
               break
@@ -96,7 +96,7 @@ spec:
             # If still stuck after 30 seconds, try removing finalizers again
             if [ $ELAPSED -ge 30 ]; then
               echo "🔧 Attempting to remove finalizers from remaining resources..."
-              for RESOURCE in nemocustomizer nemodatastore nemoentitystore nemoevaluator nemoguardrail nimcache nimpipeline; do
+              for RESOURCE in nemocustomizer nemodatastore nemoentitystore nemoevaluator nemoguardrail nimcache nimpipeline nimservice; do
                 RESOURCE_LIST=$(oc get $RESOURCE -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
                 for NAME in $RESOURCE_LIST; do
                   remove_finalizers "$RESOURCE" "$NAME"
@@ -110,7 +110,7 @@ spec:
           
           # Final check: Force remove finalizers from any remaining resources
           echo "🔍 Final check for remaining resources with finalizers..."
-          for RESOURCE in nemocustomizer nemodatastore nemoentitystore nemoevaluator nemoguardrail nimcache nimpipeline; do
+          for RESOURCE in nemocustomizer nemodatastore nemoentitystore nemoevaluator nemoguardrail nimcache nimpipeline nimservice; do
             RESOURCE_LIST=$(oc get $RESOURCE -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
             for NAME in $RESOURCE_LIST; do
               echo "⚠️  Force removing finalizers from $RESOURCE/$NAME..."
@@ -221,7 +221,7 @@ rules:
   resources: ["nemocustomizers", "nemodatastores", "nemoentitystores", "nemoevaluators", "nemoguardrails"]
   verbs: ["get", "list", "delete", "patch"]
 - apiGroups: ["apps.nvidia.com"]
-  resources: ["nimcaches", "nimpipelines"]
+  resources: ["nimcaches", "nimpipelines", "nimservices"]
   verbs: ["get", "list", "delete", "patch"]
 - apiGroups: [""]
   resources: ["pods"]

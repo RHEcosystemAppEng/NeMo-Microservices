@@ -79,16 +79,40 @@ oc get inferenceservice <your-inferenceservice-name> -n <your-namespace> -o json
 oc projects
 ```
 
-### 1. Install Dependencies
+### 1. Copy Files to Workbench/Notebook
+
+Copy the demo files to your Workbench/Notebook pod:
 
 ```bash
-cd NeMo-Microservices/demos/custom-llm-as-a-judge
-pip install -r requirements.txt
+# Replace <your-namespace> with your actual namespace (find with: oc projects)
+NAMESPACE=<your-namespace>
+
+# Get the Workbench/Notebook pod name
+JUPYTER_POD=$(oc get pods -n $NAMESPACE -l app=jupyter-notebook -o jsonpath='{.items[0].metadata.name}')
+
+# Copy files to pod
+oc cp llm-as-a-judge-tutorial.ipynb $JUPYTER_POD:/work -n $NAMESPACE
+oc cp config.py $JUPYTER_POD:/work -n $NAMESPACE
+oc cp env.donotcommit.example $JUPYTER_POD:/work -n $NAMESPACE
+
+# Copy data directory (if it exists)
+if [ -d "data" ]; then
+  oc cp data $JUPYTER_POD:/work -n $NAMESPACE
+fi
 ```
 
-### 2. Configure Environment
+### 2. Access Workbench/Notebook
 
-Copy the template and create `env.donotcommit` file:
+```bash
+# Port-forward Workbench/Notebook
+oc port-forward -n <your-namespace> svc/jupyter-service 8888:8888
+```
+
+Access: http://localhost:8888 (token: `token`)
+
+### 3. Configure Environment
+
+Copy the template and create `env.donotcommit` file in the Workbench/Notebook:
 
 ```bash
 cp env.donotcommit.example env.donotcommit
@@ -123,7 +147,6 @@ oc get inferenceservice <your-inferenceservice-name> -n <your-namespace> -o json
 ```
 
 **Optional Configuration:**
-- `RUN_LOCALLY=false` - Set to `true` only if running locally with port-forwards
 - `NIM_MODEL_SERVING_SERVICE=<your-inferenceservice-name>` - Your InferenceService name
 - `NIM_MODEL_SERVING_URL_EXTERNAL` - External URL (auto-detected from InferenceService)
 - `USE_NIM_MODEL_SERVING=true` - Use NIM Model Serving (default: true)
@@ -131,48 +154,19 @@ oc get inferenceservice <your-inferenceservice-name> -n <your-namespace> -o json
 - `DATASET_NAME=custom-llm-as-a-judge-eval-data` - Dataset name for evaluation data
 - `NDS_TOKEN=token` - NeMo Data Store token (default: "token")
 
-### 3. Set Up Port-Forwards (if running locally)
-
-If `RUN_LOCALLY=true`, run the port-forward script:
-
-```bash
-./port-forward.sh
-```
-
-Or manually (replace `<your-namespace>` with your actual namespace):
-```bash
-oc port-forward -n <your-namespace> svc/nemodatastore-sample 8001:8000 &
-oc port-forward -n <your-namespace> svc/nemoentitystore-sample 8002:8000 &
-oc port-forward -n <your-namespace> svc/nemoevaluator-sample 8004:8000 &
-oc port-forward -n <your-namespace> svc/llamastack 8321:8321 &
-```
-
-### 4. Run the Notebook
-
-```bash
-jupyter lab llm-as-a-judge-tutorial.ipynb
-```
-
 ## Configuration
 
-The notebook uses `config.py` which automatically:
-- Detects if running locally (port-forward) or in cluster
-- Sets up service URLs accordingly
+The notebook uses `config.py` which:
+- Sets up cluster-internal service URLs automatically
 - Loads API keys from environment variables
 
 ### Service URLs
 
-**Cluster Mode** (default):
+**Cluster Mode** (Workbench/Notebook within cluster):
 - Data Store: `http://nemodatastore-sample.{namespace}.svc.cluster.local:8000`
 - Entity Store: `http://nemoentitystore-sample.{namespace}.svc.cluster.local:8000`
 - Evaluator: `http://nemoevaluator-sample.{namespace}.svc.cluster.local:8000`
 - LlamaStack: `http://llamastack.{namespace}.svc.cluster.local:8321`
-
-**Local Mode** (with port-forwards):
-- Data Store: `http://localhost:8001`
-- Entity Store: `http://localhost:8002`
-- Evaluator: `http://localhost:8004`
-- LlamaStack: `http://localhost:8321`
 
 ## Customization
 
@@ -316,8 +310,7 @@ The notebook automatically detects if LlamaStack is available and initializes th
 ## Files
 
 - `llm-as-a-judge-tutorial.ipynb` - Main tutorial notebook
-- `config.py` - Configuration file (auto-detects local vs cluster)
+- `config.py` - Configuration file (cluster mode)
 - `requirements.txt` - Python dependencies
-- `port-forward.sh` - Port-forward script for local development
 - `data/doctor_consults_with_summaries.jsonl` - Sample dataset
 
