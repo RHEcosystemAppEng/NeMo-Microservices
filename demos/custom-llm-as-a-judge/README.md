@@ -21,7 +21,7 @@ The workflow:
 - ✅ NeMo Evaluator (v25.06+)
 - ✅ NeMo Data Store
 - ✅ NeMo Entity Store
-- ✅ LlamaStack (optional but recommended)
+- ✅ LlamaStack
 
 ### Required Model
 - ✅ **NIM Model Serving**: `meta/llama-3.2-1b-instruct` model deployed via KServe InferenceService
