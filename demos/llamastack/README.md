@@ -44,9 +44,9 @@ podman build --platform=linux/amd64 \
   -f containers/Containerfile \
   --build-arg DISTRO_NAME=nvidia \
   --build-arg INSTALL_MODE=editable \
-  --tag quay.io/hacohen/distribution-nvidia:v0.3.0 .
+  --tag quay.io/ecosystem-appeng/llamastack-server-distribution:latest .
 
-podman push quay.io/hacohen/distribution-nvidia:v0.3.0
+podman push quay.io/ecosystem-appeng/llamastack-server-distribution:latest
 ```
 
 The image configuration in the Helm values (`deploy/nemo-instances/values.yaml`) references this image:
@@ -54,8 +54,8 @@ The image configuration in the Helm values (`deploy/nemo-instances/values.yaml`)
 ```yaml
 llamastack:
   image:
-    repository: quay.io/hacohen/distribution-nvidia
-    tag: "v0.3.0"
+    repository: quay.io/ecosystem-appeng/llamastack-server-distribution
+    tag: "latest"
 ```
 
 ### Helm Deployment

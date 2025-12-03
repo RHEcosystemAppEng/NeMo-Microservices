@@ -334,14 +334,14 @@ nimPipelineEmbedding:
 
 # ===== LlamaStack Configuration =====
 # LlamaStack provides a unified abstraction layer over NeMo Microservices
-# Image: quay.io/hacohen/distribution-nvidia:v0.3.0
+# Image: quay.io/ecosystem-appeng/llamastack-server-distribution:latest
 llamastack:
   enabled: true
   name: llamastack
   configMapName: llamastack-config
   image:
-    repository: quay.io/hacohen/distribution-nvidia
-    tag: "v0.3.0"
+    repository: quay.io/ecosystem-appeng/llamastack-server-distribution
+    tag: "latest"
     pullPolicy: Always
   pullSecret: ngc-secret
   ngcAPISecret:
