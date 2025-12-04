@@ -1,7 +1,10 @@
 {{- if .Values.install.volcano }}
-# Post-install hook to fix Volcano webhook namespace selector
-# The Volcano chart adds a default NotIn exclusion which conflicts with our In inclusion
-# This hook removes the NotIn exclusion to keep only the In expression for namespace scoping
+# Post-install hook to fix Volcano webhook configuration
+# 1. Namespace selector: The Volcano chart adds a default NotIn exclusion which conflicts with our In inclusion
+#    This hook removes the NotIn exclusion to keep only the In expression for namespace scoping
+# 2. Failure policy: Set to Ignore to prevent pod creation failures when webhook times out
+#    (e.g., due to Istio mesh NetworkPolicy blocking API server -> webhook connectivity)
+#    This is the least intrusive fix - pods will be created even if webhook validation times out
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -33,12 +36,20 @@ spec:
           NAMESPACE="{{ .Values.namespace.name }}"
           
           # Patch all three Volcano webhooks to use In operator only
+          # Also set failurePolicy to Ignore to prevent pod creation failures when webhook times out
+          # (e.g., due to Istio mesh NetworkPolicy blocking API server -> webhook connectivity)
           for webhook in jobs-validate pods-validate queues-validate; do
             echo "Patching volcano-admission-service-$webhook..."
+            # Patch namespace selector
             oc patch validatingwebhookconfiguration volcano-admission-service-$webhook \
               --type='json' \
               -p="[{\"op\": \"replace\", \"path\": \"/webhooks/0/namespaceSelector\", \"value\": {\"matchExpressions\": [{\"key\": \"kubernetes.io/metadata.name\", \"operator\": \"In\", \"values\": [\"$NAMESPACE\"]}]}}]" || \
-            echo "Webhook volcano-admission-service-$webhook not found or already patched"
+            echo "Webhook volcano-admission-service-$webhook namespace selector not found or already patched"
+            # Patch failurePolicy to Ignore (allows pods to be created even if webhook times out)
+            oc patch validatingwebhookconfiguration volcano-admission-service-$webhook \
+              --type='json' \
+              -p="[{\"op\": \"replace\", \"path\": \"/webhooks/0/failurePolicy\", \"value\": \"Ignore\"}]" || \
+            echo "Webhook volcano-admission-service-$webhook failurePolicy not found or already patched"
           done
           
           echo "Volcano webhook patching completed"

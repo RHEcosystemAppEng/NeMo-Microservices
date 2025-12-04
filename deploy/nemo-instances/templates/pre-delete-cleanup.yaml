@@ -75,8 +75,8 @@ spec:
           # Delete NeMo Custom Resources
           delete_crs_with_finalizer_handling "nemocustomizer,nemodatastore,nemoentitystore,nemoevaluator,nemoguardrail" "NeMo"
           
-          # Delete NIM Custom Resources
-          delete_crs_with_finalizer_handling "nimcache,nimpipeline" "NIM"
+          # Delete NIM Custom Resources (including NIMService)
+          delete_crs_with_finalizer_handling "nimcache,nimpipeline,nimservice" "NIM"
           
           # Wait for CRs to be deleted (with timeout)
           echo "⏳ Waiting for Custom Resources to be deleted..."
@@ -86,7 +86,7 @@ spec:
           MAX_WAIT=120
           ELAPSED=0
           while [ $ELAPSED -lt $MAX_WAIT ]; do
-            CR_COUNT=$(oc get nemocustomizer,nemodatastore,nemoentitystore,nemoevaluator,nemoguardrail,nimcache,nimpipeline -n "$NAMESPACE" 2>/dev/null | tail -n +2 | wc -l || echo "0")
+            CR_COUNT=$(oc get nemocustomizer,nemodatastore,nemoentitystore,nemoevaluator,nemoguardrail,nimcache,nimpipeline,nimservice -n "$NAMESPACE" 2>/dev/null | tail -n +2 | wc -l || echo "0")
             if [ "$CR_COUNT" -eq 0 ]; then
               echo "✅ All Custom Resources deleted"
               break
@@ -96,7 +96,7 @@ spec:
             # If still stuck after 30 seconds, try removing finalizers again
             if [ $ELAPSED -ge 30 ]; then
               echo "🔧 Attempting to remove finalizers from remaining resources..."
-              for RESOURCE in nemocustomizer nemodatastore nemoentitystore nemoevaluator nemoguardrail nimcache nimpipeline; do
+              for RESOURCE in nemocustomizer nemodatastore nemoentitystore nemoevaluator nemoguardrail nimcache nimpipeline nimservice; do
                 RESOURCE_LIST=$(oc get $RESOURCE -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
                 for NAME in $RESOURCE_LIST; do
                   remove_finalizers "$RESOURCE" "$NAME"
@@ -110,7 +110,7 @@ spec:
           
           # Final check: Force remove finalizers from any remaining resources
           echo "🔍 Final check for remaining resources with finalizers..."
-          for RESOURCE in nemocustomizer nemodatastore nemoentitystore nemoevaluator nemoguardrail nimcache nimpipeline; do
+          for RESOURCE in nemocustomizer nemodatastore nemoentitystore nemoevaluator nemoguardrail nimcache nimpipeline nimservice; do
             RESOURCE_LIST=$(oc get $RESOURCE -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
             for NAME in $RESOURCE_LIST; do
               echo "⚠️  Force removing finalizers from $RESOURCE/$NAME..."
@@ -118,9 +118,18 @@ spec:
             done
           done
           
-          # Wait for pods to terminate (with timeout)
-          echo "⏳ Waiting for pods to terminate..."
-          oc wait --for=delete pod --all -n "$NAMESPACE" --timeout=120s || echo "⚠️  Some pods may still be terminating (this is OK)"
+          # Wait for nemo-instances pods to terminate (with timeout)
+          # Only wait for pods with nemo-instances labels, not all pods in namespace
+          echo "⏳ Waiting for nemo-instances pods to terminate..."
+          INSTANCE_PODS=$(oc get pods -n "$NAMESPACE" -l app.kubernetes.io/instance=nemo-instances -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$INSTANCE_PODS" ]; then
+            for POD in $INSTANCE_PODS; do
+              echo "  - Waiting for pod: $POD"
+              oc wait --for=delete pod "$POD" -n "$NAMESPACE" --timeout=60s || echo "⚠️  Pod $POD may still be terminating (this is OK)"
+            done
+          else
+            echo "✅ No nemo-instances pods found"
+          fi
           
           # Clean up cluster-scoped resources that might block Helm uninstall
           echo "🧹 Cleaning up cluster-scoped resources..."
@@ -162,8 +171,19 @@ spec:
           
           # Check for and remove finalizers on deployments and other resources
           echo "🔍 Checking for finalizers on Helm-managed resources..."
-          for RESOURCE in deployment service replicaset; do
+          for RESOURCE in deployment service replicaset configmap secret; do
             RESOURCE_LIST=$(oc get $RESOURCE -l app.kubernetes.io/instance=nemo-instances -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+            if [ -z "$RESOURCE_LIST" ]; then
+              # Also check for resources with nemo-instances name patterns (for resources without labels)
+              case $RESOURCE in
+                configmap)
+                  RESOURCE_LIST=$(oc get $RESOURCE -n "$NAMESPACE" -o jsonpath='{.items[?(@.metadata.name=~"nemo-.*|llamastack.*")].metadata.name}' 2>/dev/null || echo "")
+                  ;;
+                secret)
+                  RESOURCE_LIST=$(oc get $RESOURCE -n "$NAMESPACE" -o jsonpath='{.items[?(@.metadata.name=~"nemo-ms-.*|wandb.*")].metadata.name}' 2>/dev/null || echo "")
+                  ;;
+              esac
+            fi
             for NAME in $RESOURCE_LIST; do
               FINALIZERS=$(oc get $RESOURCE "$NAME" -n "$NAMESPACE" -o jsonpath='{.metadata.finalizers[*]}' 2>/dev/null || echo "")
               if [ -n "$FINALIZERS" ]; then
@@ -201,7 +221,7 @@ rules:
   resources: ["nemocustomizers", "nemodatastores", "nemoentitystores", "nemoevaluators", "nemoguardrails"]
   verbs: ["get", "list", "delete", "patch"]
 - apiGroups: ["apps.nvidia.com"]
-  resources: ["nimcaches", "nimpipelines"]
+  resources: ["nimcaches", "nimpipelines", "nimservices"]
   verbs: ["get", "list", "delete", "patch"]
 - apiGroups: [""]
   resources: ["pods"]

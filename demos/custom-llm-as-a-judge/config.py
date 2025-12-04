@@ -1,37 +1,29 @@
 # (Required) NeMo Microservices URLs
-# Auto-detect if running locally (via port-forward) or in cluster
+# Cluster mode only - runs in Workbench/Notebook within the cluster
 import os
 from pathlib import Path
 
-# Load environment variables from env.donotcommit or .env file if it exists (for IDE usage)
+# Load environment variables from env.donotcommit file if it exists (for IDE usage)
 # Uses python-dotenv library - install with: pip install python-dotenv
-# Priority: env.donotcommit > .env (for backward compatibility)
+# 🔒 SECURITY: Never hardcode secrets in config files!
+# All sensitive values (tokens, API keys) should be in env.donotcommit file
 try:
     from dotenv import load_dotenv
-    config_dir = Path(__file__).parent
-    # Try env.donotcommit first (preferred), then .env as fallback
-    env_donotcommit = config_dir / "env.donotcommit"
-    env_file = config_dir / ".env"
-    if env_donotcommit.exists():
-        load_dotenv(env_donotcommit, override=False)  # override=False: don't overwrite existing env vars
-    elif env_file.exists():
-        load_dotenv(env_file, override=False)  # override=False: don't overwrite existing env vars
+    # Load env.donotcommit file first (preferred)
+    env_donotcommit_path = Path(__file__).parent / "env.donotcommit"
+    if env_donotcommit_path.exists():
+        load_dotenv(env_donotcommit_path, override=False)
+    # Then load .env as a fallback (for backward compatibility)
+    env_path = Path(__file__).parent / ".env"
+    if env_path.exists():
+        load_dotenv(env_path, override=False)  # override=False: don't overwrite existing env vars
 except ImportError:
     # python-dotenv not installed - skip .env loading (will use system env vars only)
     pass
 
 # Namespace for cluster services
+# Default is provided for convenience, but should be set in env.donotcommit file
 NMS_NAMESPACE = os.getenv("NMS_NAMESPACE", "anemo-rhoai")
-
-# Determine if running locally or in cluster
-# If RUN_LOCALLY env var is explicitly set, use it
-# If absent, default to cluster mode (False)
-RUN_LOCALLY_ENV = os.getenv("RUN_LOCALLY")
-if RUN_LOCALLY_ENV is not None:
-    RUN_LOCALLY = RUN_LOCALLY_ENV.lower() == "true"
-else:
-    # Default to cluster mode when RUN_LOCALLY is not set
-    RUN_LOCALLY = False
 
 # External NIM service variables (always defined for compatibility)
 # These are used for Knative InferenceService (not recommended due to URL stripping issues)
@@ -39,21 +31,13 @@ EXTERNAL_NIM_SERVICE = os.getenv("EXTERNAL_NIM_SERVICE", "anemo-rhoai-predictor-
 EXTERNAL_NIM_NAMESPACE = os.getenv("EXTERNAL_NIM_NAMESPACE", NMS_NAMESPACE)
 EXTERNAL_NIM_PORT = os.getenv("EXTERNAL_NIM_PORT", "80")
 
-if RUN_LOCALLY:
-    # Localhost URLs (for port-forwarding from local machine)
-    NDS_URL = "http://localhost:8001"  # Data Store
-    ENTITY_STORE_URL = "http://localhost:8002"  # Entity Store
-    EVALUATOR_URL = "http://localhost:8004"  # Evaluator
-    NIM_URL = "http://localhost:8006"  # NIM (optional, for target model)
-    LLAMASTACK_URL = "http://localhost:8321"  # LlamaStack Server
-else:
-    # Cluster-internal URLs (for running from within cluster)
-    NDS_URL = f"http://nemodatastore-sample.{NMS_NAMESPACE}.svc.cluster.local:8000"
-    ENTITY_STORE_URL = f"http://nemoentitystore-sample.{NMS_NAMESPACE}.svc.cluster.local:8000"
-    EVALUATOR_URL = f"http://nemoevaluator-sample.{NMS_NAMESPACE}.svc.cluster.local:8000"
-    # External NIM service (if using external NIM - not recommended, use STANDARD_NIM_SERVICE instead)
-    NIM_URL = f"http://{EXTERNAL_NIM_SERVICE}.{EXTERNAL_NIM_NAMESPACE}.svc.cluster.local:{EXTERNAL_NIM_PORT}"
-    LLAMASTACK_URL = f"http://llamastack.{NMS_NAMESPACE}.svc.cluster.local:8321"  # LlamaStack Server
+# Cluster-internal URLs (for running from within cluster Workbench/Notebook)
+NDS_URL = f"http://nemodatastore-sample.{NMS_NAMESPACE}.svc.cluster.local:8000"
+ENTITY_STORE_URL = f"http://nemoentitystore-sample.{NMS_NAMESPACE}.svc.cluster.local:8000"
+EVALUATOR_URL = f"http://nemoevaluator-sample.{NMS_NAMESPACE}.svc.cluster.local:8000"
+# External NIM service (if using external NIM - not recommended, use STANDARD_NIM_SERVICE instead)
+NIM_URL = f"http://{EXTERNAL_NIM_SERVICE}.{EXTERNAL_NIM_NAMESPACE}.svc.cluster.local:{EXTERNAL_NIM_PORT}"
+LLAMASTACK_URL = f"http://llamastack.{NMS_NAMESPACE}.svc.cluster.local:8321"  # LlamaStack Server
 
 # For evaluation jobs, use NEMO_URL which points to Evaluator
 # The notebook uses NEMO_URL for Evaluator endpoints
@@ -64,18 +48,24 @@ NEMO_URL = EVALUATOR_URL
 # Evaluation jobs execute in-cluster and need cluster URLs
 # This is separate from NIM_URL because evaluation jobs can't use localhost
 # 
-# NIM Model Serving Configuration (NEW - for llama-3.2-1b-instruct via NIM Model Serving)
-# Uses KServe/Knative InferenceService deployed via Helm chart
-NIM_MODEL_SERVING_SERVICE = os.getenv("NIM_MODEL_SERVING_SERVICE", "anemo-rhoai-model2")
+# NIM Model Serving Configuration (for llama-3.2-1b-instruct via KServe InferenceService)
+# Uses KServe InferenceService deployed via Helm chart
+# Note: Service name may differ from model name
+# For KServe InferenceService, use the external URL from the InferenceService status
+# Find your URL: oc get inferenceservice <name> -n <namespace> -o jsonpath='{.status.url}'
+NIM_MODEL_SERVING_SERVICE = os.getenv("NIM_MODEL_SERVING_SERVICE", "anemo-rhoai-model")
 NIM_MODEL_SERVING_MODEL = os.getenv("NIM_MODEL_SERVING_MODEL", "meta/llama-3.2-1b-instruct")
 
-# Option 1: Use external URL (may work around Evaluator URL stripping bug)
-NIM_MODEL_SERVING_URL_EXTERNAL = os.getenv("NIM_MODEL_SERVING_URL_EXTERNAL", "https://anemo-rhoai-model2-anemo-rhoai.apps.ai-dev05.kni.syseng.devcluster.openshift.com")
+# External URL (recommended - may work around Evaluator URL stripping bug)
+# This is the HTTPS URL from the InferenceService status
+NIM_MODEL_SERVING_URL_EXTERNAL = os.getenv("NIM_MODEL_SERVING_URL_EXTERNAL", "https://anemo-rhoai-model-anemo-rhoai.apps.ai-dev05.kni.syseng.devcluster.openshift.com")
 
-# Option 2: Use cluster-internal URL (has URL stripping bug in Evaluator)
-# Knative services use port 80 (HTTP) and predictor service name
-# For anemo-rhoai-model2, the service is anemo-rhoai-model2-predictor-00001
-NIM_MODEL_SERVING_URL_CLUSTER = f"http://{NIM_MODEL_SERVING_SERVICE}-predictor-00001.{NMS_NAMESPACE}.svc.cluster.local:80"
+# Cluster-internal URL (has URL stripping bug in Evaluator v25.06/v25.08)
+# ⚠️  WARNING: Evaluator strips /chat/completions from cluster-internal Knative service URLs
+# Using external URL (HTTPS) may work around this issue
+# For cluster-internal access, use the predictor service name
+# Find your service: oc get inferenceservice <name> -n <namespace> -o jsonpath='{.status.components.predictor.address.url}'
+NIM_MODEL_SERVING_URL_CLUSTER = f"http://{NIM_MODEL_SERVING_SERVICE}-predictor.{NMS_NAMESPACE}.svc.cluster.local:80"
 
 # Legacy: Standard NIM service (DEPRECATED - kept for backward compatibility)
 # The e2e-notebook works because it uses meta-llama3-1b-instruct service on port 8000
@@ -114,8 +104,9 @@ else:
 # EXTERNAL_NIM_NAMESPACE = os.getenv("EXTERNAL_NIM_NAMESPACE", NMS_NAMESPACE)
 # NIM_URL_CLUSTER = f"http://{EXTERNAL_NIM_SERVICE}.{EXTERNAL_NIM_NAMESPACE}.svc.cluster.local:80"
 
-# Optional: Service account token for authentication (if required)
-# This token is used for cluster-internal authentication
+# (Optional) NIM Service Account Token for authenticating with NIM model services
+# This is a Kubernetes service account token (JWT) used to authenticate with NIM endpoints
+# Get your token: oc create token anemo-rhoai-model-sa -n anemo-rhoai
 NIM_SERVICE_ACCOUNT_TOKEN = os.getenv("NIM_SERVICE_ACCOUNT_TOKEN", "")
 
 # (Optional) NeMo Data Store token
