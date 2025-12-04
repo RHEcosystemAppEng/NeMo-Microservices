@@ -134,8 +134,16 @@ spec:
           
           # Check LlamaStack service account (if LlamaStack is enabled)
           {{- if and .Values.llamastack.enabled .Values.llamastack.useBearerToken }}
+          {{- /* Auto-construct serviceAccountName from inferenceServiceName if not explicitly set */}}
+          {{- $serviceAccountName := .Values.llamastack.serviceAccountName }}
+          {{- if not $serviceAccountName }}
+            {{- if .Values.llamastack.inferenceServiceName }}
+              {{- $serviceAccountName = printf "%s-sa" .Values.llamastack.inferenceServiceName }}
+            {{- end }}
+          {{- end }}
+          {{- if $serviceAccountName }}
           echo "📋 Checking LlamaStack Service Account:"
-          SA_NAME="{{ .Values.llamastack.serviceAccountName }}"
+          SA_NAME="{{ $serviceAccountName }}"
           echo -n "  Checking LlamaStack service account ($SA_NAME)... "
           if oc get sa "$SA_NAME" -n "$NAMESPACE" >/dev/null 2>&1; then
             echo "✅ Found"
@@ -144,6 +152,7 @@ spec:
             # Don't fail - Helm will create it
           fi
           echo ""
+          {{- end }}
           {{- end }}
           
           # Final validation

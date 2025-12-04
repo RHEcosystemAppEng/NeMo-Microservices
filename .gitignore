@@ -3,3 +3,6 @@
 *.jsonl
 .DS_Store
 demos/llamastack/Llama_Stack_NVIDIA_E2E_Flow_include_outputs.ipynb
+
+# Demo scripts directory (contains sensitive tokens and real credentials)
+demo-scripts/
