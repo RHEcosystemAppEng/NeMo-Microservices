@@ -50,14 +50,38 @@ spec:
 {{- range .Values.evaluator.env }}
     - name: {{ .name }}
       {{- if eq .name "NIM_PROXY_URL" }}
-      # Automatically construct NIM service URL using nimPipeline.serviceName and namespace
+      # Automatically construct NIM service URL
+      # For NIM (OpenShift AI) deployments:
+      # - Service name should include -predictor suffix (e.g., meta-llama3-1b-instruct-predictor)
+      # - URL should include /v1 path
+      # - Namespace might be different from NeMo namespace
       {{- $nimServiceName := "meta-llama3-1b-instruct" }}
-      {{- if hasKey $.Values "nimPipeline" }}
-        {{- if hasKey $.Values.nimPipeline "serviceName" }}
-          {{- $nimServiceName = $.Values.nimPipeline.serviceName }}
+      {{- $nimServiceSuffix := "" }}
+      {{- $nimNamespace := $.Values.namespace.name }}
+      {{- $nimPath := "" }}
+      {{- if hasKey $.Values.evaluator "nimProxy" }}
+        {{- if hasKey $.Values.evaluator.nimProxy "serviceName" }}
+          {{- if ne $.Values.evaluator.nimProxy.serviceName "" }}
+            {{- $nimServiceName = $.Values.evaluator.nimProxy.serviceName }}
+          {{- end }}
+        {{- end }}
+        {{- if hasKey $.Values.evaluator.nimProxy "serviceSuffix" }}
+          {{- if ne $.Values.evaluator.nimProxy.serviceSuffix "" }}
+            {{- $nimServiceSuffix = $.Values.evaluator.nimProxy.serviceSuffix }}
+          {{- end }}
+        {{- end }}
+        {{- if hasKey $.Values.evaluator.nimProxy "namespace" }}
+          {{- if ne $.Values.evaluator.nimProxy.namespace "" }}
+            {{- $nimNamespace = $.Values.evaluator.nimProxy.namespace }}
+          {{- end }}
+        {{- end }}
+        {{- if hasKey $.Values.evaluator.nimProxy "path" }}
+          {{- if ne $.Values.evaluator.nimProxy.path "" }}
+            {{- $nimPath = $.Values.evaluator.nimProxy.path }}
+          {{- end }}
         {{- end }}
       {{- end }}
-      value: "http://{{ $nimServiceName }}.{{ $.Values.namespace.name }}.svc.cluster.local:8000"
+      value: "http://{{ $nimServiceName }}{{ $nimServiceSuffix }}.{{ $nimNamespace }}.svc.cluster.local:8000{{ $nimPath }}"
       {{- else }}
       value: {{ .value | quote }}
       {{- end }}

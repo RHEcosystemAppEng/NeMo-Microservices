@@ -14,7 +14,29 @@ spec:
       volumeAccessMode: {{ .Values.storage.volumeAccessMode }}
       size: {{ .Values.guardrail.configStorePVC.size | quote }}
   nimEndpoint:
-    baseURL: http://{{ .Values.nimPipeline.serviceName }}.{{ .Values.namespace.name }}.svc.cluster.local:8000/v1
+    {{- if and (hasKey .Values.guardrail "nimEndpoint") (hasKey .Values.guardrail.nimEndpoint "serviceName") (ne .Values.guardrail.nimEndpoint.serviceName "") }}
+    {{- $nimServiceName := .Values.guardrail.nimEndpoint.serviceName }}
+    {{- $nimServiceSuffix := "" }}
+    {{- if hasKey .Values.guardrail.nimEndpoint "serviceSuffix" }}
+      {{- $nimServiceSuffix = .Values.guardrail.nimEndpoint.serviceSuffix }}
+    {{- end }}
+    {{- $nimNamespace := .Values.namespace.name }}
+    {{- if hasKey .Values.guardrail.nimEndpoint "namespace" }}
+      {{- if ne .Values.guardrail.nimEndpoint.namespace "" }}
+        {{- $nimNamespace = .Values.guardrail.nimEndpoint.namespace }}
+      {{- end }}
+    {{- end }}
+    {{- $nimPort := "8000" }}
+    {{- if hasKey .Values.guardrail.nimEndpoint "port" }}
+      {{- if ne .Values.guardrail.nimEndpoint.port "" }}
+        {{- $nimPort = .Values.guardrail.nimEndpoint.port }}
+      {{- end }}
+    {{- end }}
+    baseURL: http://{{ $nimServiceName }}{{ $nimServiceSuffix }}.{{ $nimNamespace }}.svc.cluster.local:{{ $nimPort }}/v1
+    {{- else }}
+    # Default fallback (if not configured, use meta-llama3-1b-instruct)
+    baseURL: http://meta-llama3-1b-instruct.{{ .Values.namespace.name }}.svc.cluster.local:8000/v1
+    {{- end }}
   databaseConfig:
     host: nemo-infra-guardrail-postgresql.{{ .Values.namespace.name }}.svc.cluster.local
     port: {{ .Values.guardrail.database.port }}

@@ -15,4 +15,22 @@ data:
 {{- include "llamastack.config.storage" . | nindent 4 }}
 {{- include "llamastack.config.models" . | nindent 4 }}
 {{- include "llamastack.config.server" . | nindent 4 }}
+  {{- if .Values.llamastack.useBearerToken }}
+  start-llamastack.sh: |
+    #!/bin/bash
+    # Startup script for LlamaStack with Bearer token authentication support
+    set -e
+
+    CONFIG_FILE="/app/my-run.yaml"
+
+    # If using Bearer token, the token is already in NVIDIA_SERVICE_ACCOUNT_TOKEN env var
+    # LlamaStack's NVIDIA provider will use it as api_key
+    # OpenAI client automatically formats it as "Bearer {api_key}" in Authorization header
+    if [ -n "${NVIDIA_SERVICE_ACCOUNT_TOKEN}" ]; then
+        echo "Using Bearer token authentication via NVIDIA_SERVICE_ACCOUNT_TOKEN"
+    fi
+
+    # Start LlamaStack
+    exec llama stack run "${CONFIG_FILE}" --port "${LLAMA_STACK_PORT}"
+  {{- end }}
 {{- end }}

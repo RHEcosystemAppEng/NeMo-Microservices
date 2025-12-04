@@ -21,22 +21,43 @@ The workflow:
 - ✅ NeMo Evaluator (v25.06+)
 - ✅ NeMo Data Store
 - ✅ NeMo Entity Store
-- ✅ LlamaStack (optional but recommended)
+- ✅ LlamaStack
 
 ### Required Model
-- ✅ **NIM Model Serving**: `meta/llama-3.2-1b-instruct` model deployed via NIM Model Serving
-  - Service: Your NIM Model Serving InferenceService name (configured via `NIM_MODEL_SERVING_SERVICE` in `env.donotcommit`)
+- ✅ **NIM Model Serving**: `meta/llama-3.2-1b-instruct` model deployed via KServe InferenceService
+  - Service name: Your InferenceService name (configured via `NIM_MODEL_SERVING_SERVICE` in `env.donotcommit`)
   - This model is used for both the **judge** (evaluator) and **target** (summary generator) models
-  - The model must be accessible via the configured external URL or cluster-internal service
+  - The model must be accessible via the configured external URL
   - **How to find your service name**: `oc get inferenceservice -n <your-namespace>`
-  - **How to find your external URL**: `oc get route -n <your-namespace> | grep <your-service-name>` or check your OpenShift console
+  - **How to find your external URL**: `oc get inferenceservice <name> -n <namespace> -o jsonpath='{.status.url}'`
 
-### API Keys (Optional - Not Required)
-- **No External API Key Required**: This tutorial uses your deployed NIM Model Serving endpoint (your InferenceService with `meta/llama-3.2-1b-instruct` model) for both judge and target models
-- **Service Account Token Required**: You need to set `NIM_SERVICE_ACCOUNT_TOKEN` in `env.donotcommit` for authentication with the external NIM Model Serving URL
-  - **How to get your token**: `oc get secret <service-account-name> -n <namespace> -o jsonpath='{.data.token}' | base64 -d`
-- **OpenAI API Key**: Optional - only if you want to use OpenAI models instead (not used in this tutorial)
-- **NVIDIA API Key**: Optional - only if you want to use NVIDIA API models instead (not used in this tutorial)
+### Required Configuration
+
+#### 1. Service Account Token (REQUIRED)
+
+The service account token is required for authenticating with the KServe InferenceService. This token must be set in `env.donotcommit`:
+
+**Get your service account token:**
+```bash
+# Replace <your-namespace> and <service-account-name> with your actual values
+# The service account name is typically: <inferenceservice-name>-sa
+oc create token <service-account-name> -n <your-namespace> --duration=8760h
+
+# Example (replace with your actual service account and namespace):
+oc create token my-model-sa -n my-namespace --duration=8760h
+```
+
+#### 2. Model's External URL (REQUIRED)
+
+The external URL is typically auto-detected from the InferenceService, but you can verify:
+```bash
+oc get inferenceservice <your-inferenceservice-name> -n <your-namespace> -o jsonpath='{.status.url}'
+# Example output: https://my-model-my-namespace.apps.my-cluster.example.com
+```
+
+**Note**: 
+- **No External API Key Required**: This tutorial uses your deployed NIM Model Serving endpoint for both judge and target models
+- **Service Account Token Required**: You need to set `NIM_SERVICE_ACCOUNT_TOKEN` in `env.donotcommit` for authentication
 
 ### Python Environment
 - Python 3.8+
@@ -44,104 +65,108 @@ The workflow:
 
 ## Quick Start
 
-### 1. Install Dependencies
+### 🔒 Security Setup (REQUIRED FIRST STEP)
 
+**IMPORTANT**: This demo uses `env.donotcommit` file for sensitive configuration (tokens, API keys). 
+
+**Before running this demo:**
+1. Copy the template: `cp env.donotcommit.example env.donotcommit`
+2. Edit `env.donotcommit` and add your `NMS_NAMESPACE` and `NIM_SERVICE_ACCOUNT_TOKEN`
+3. The `env.donotcommit` file is git-ignored and will NOT be committed to version control
+
+**Find your namespace:**
 ```bash
-cd NeMo-Microservices/demos/custom-llm-as-a-judge
-pip install -r requirements.txt
+oc projects
 ```
 
-### 2. Configure Environment
+### 1. Copy Files to Workbench/Notebook
 
-Copy the template and create `env.donotcommit` file:
+Copy the demo files to your Workbench/Notebook pod:
+
+```bash
+# Replace <your-namespace> with your actual namespace (find with: oc projects)
+NAMESPACE=<your-namespace>
+
+# Get the Workbench/Notebook pod name
+JUPYTER_POD=$(oc get pods -n $NAMESPACE -l app=jupyter-notebook -o jsonpath='{.items[0].metadata.name}')
+
+# Copy files to pod
+oc cp llm-as-a-judge-tutorial.ipynb $JUPYTER_POD:/work -n $NAMESPACE
+oc cp config.py $JUPYTER_POD:/work -n $NAMESPACE
+oc cp env.donotcommit.example $JUPYTER_POD:/work -n $NAMESPACE
+
+# Copy data directory (if it exists)
+if [ -d "data" ]; then
+  oc cp data $JUPYTER_POD:/work -n $NAMESPACE
+fi
+```
+
+### 2. Access Workbench/Notebook
+
+```bash
+# Port-forward Workbench/Notebook
+oc port-forward -n <your-namespace> svc/jupyter-service 8888:8888
+```
+
+Access: http://localhost:8888 (token: `token`)
+
+### 3. Configure Environment
+
+Copy the template and create `env.donotcommit` file in the Workbench/Notebook:
 
 ```bash
 cp env.donotcommit.example env.donotcommit
-# Edit env.donotcommit and add your NIM_SERVICE_ACCOUNT_TOKEN
+# Edit env.donotcommit and add your values (especially NMS_NAMESPACE and NIM_SERVICE_ACCOUNT_TOKEN)
 ```
 
-Required configuration in `env.donotcommit`:
+**Required Configuration in `env.donotcommit`:**
 
+1. **Namespace** (REQUIRED):
 ```bash
-# Required: Your namespace
-NMS_NAMESPACE=your-namespace
-
-# NIM Model Serving Configuration
-# Replace with your actual InferenceService name
-NIM_MODEL_SERVING_SERVICE=your-nim-service-name
-NIM_MODEL_SERVING_MODEL=meta/llama-3.2-1b-instruct
-# Replace with your actual external URL (HTTPS)
-# Format: https://<service-name>-<namespace>.apps.<cluster-domain>
-NIM_MODEL_SERVING_URL_EXTERNAL=https://your-service-name-your-namespace.apps.your-cluster-domain.com
-USE_NIM_MODEL_SERVING=true
-USE_EXTERNAL_URL=true
-
-# REQUIRED: Service Account Token for authentication
-# Get from: oc get secret <service-account-name> -n <namespace> -o jsonpath='{.data.token}' | base64 -d
-NIM_SERVICE_ACCOUNT_TOKEN=your-token-here
-
-# Optional
-RUN_LOCALLY=false  # Set to true for local development with port-forwards
-DATASET_NAME=custom-llm-as-a-judge-eval-data
+NMS_NAMESPACE=<your-namespace>
 ```
-
-**How to find your values**:
-- **Namespace**: Your OpenShift project/namespace name
-- **Service Name**: `oc get inferenceservice -n <your-namespace>` - look for your NIM Model Serving InferenceService
-- **External URL**: 
-  - Option 1: `oc get route -n <your-namespace> | grep <your-service-name>`
-  - Option 2: Check OpenShift console → Networking → Routes
-  - Format: `https://<service-name>-<namespace>.apps.<cluster-domain>`
-- **Service Account Token**: `oc get secret <service-account-name> -n <namespace> -o jsonpath='{.data.token}' | base64 -d`
-
-**Note**: 
-- The notebook uses NIM Model Serving (your configured service) for both judge and target models
-- Model used: `meta/llama-3.2-1b-instruct` (deployed via NIM Model Serving)
-- **Required**: `NIM_SERVICE_ACCOUNT_TOKEN` must be set in `env.donotcommit` for external URL authentication
-- The `env.donotcommit` file is git-ignored and will NOT be committed to version control
-
-### 3. Set Up Port-Forwards (if running locally)
-
-If `RUN_LOCALLY=true`, run the port-forward script:
-
+Find your namespace:
 ```bash
-./port-forward.sh
+oc projects
 ```
 
-Or manually (replace `<your-namespace>` with your actual namespace):
+2. **Service Account Token** (REQUIRED):
 ```bash
-oc port-forward -n <your-namespace> svc/nemodatastore-sample 8001:8000 &
-oc port-forward -n <your-namespace> svc/nemoentitystore-sample 8002:8000 &
-oc port-forward -n <your-namespace> svc/nemoevaluator-sample 8004:8000 &
-oc port-forward -n <your-namespace> svc/llamastack 8321:8321 &
+NIM_SERVICE_ACCOUNT_TOKEN=<your-service-account-token>
 ```
-
-### 4. Run the Notebook
-
+Get your token:
 ```bash
-jupyter lab llm-as-a-judge-tutorial.ipynb
+# Replace with your actual service account name (typically: <inferenceservice-name>-sa)
+oc create token anemo-rhoai-model-sa -n <your-namespace> --duration=8760h
 ```
+
+3. **Model External URL** (REQUIRED):
+The external URL is typically auto-detected from the InferenceService, but you can verify:
+```bash
+oc get inferenceservice <your-inferenceservice-name> -n <your-namespace> -o jsonpath='{.status.url}'
+```
+
+**Optional Configuration:**
+- `NIM_MODEL_SERVING_SERVICE=<your-inferenceservice-name>` - Your InferenceService name
+- `NIM_MODEL_SERVING_URL_EXTERNAL` - External URL (auto-detected from InferenceService)
+- `USE_NIM_MODEL_SERVING=true` - Use NIM Model Serving (default: true)
+- `USE_EXTERNAL_URL=true` - Use external URL to avoid Evaluator URL stripping bug (default: true)
+- `DATASET_NAME=custom-llm-as-a-judge-eval-data` - Dataset name for evaluation data
+- `NDS_TOKEN=token` - NeMo Data Store token (default: "token")
 
 ## Configuration
 
-The notebook uses `config.py` which automatically:
-- Detects if running locally (port-forward) or in cluster
-- Sets up service URLs accordingly
+The notebook uses `config.py` which:
+- Sets up cluster-internal service URLs automatically
 - Loads API keys from environment variables
 
 ### Service URLs
 
-**Cluster Mode** (default):
+**Cluster Mode** (Workbench/Notebook within cluster):
 - Data Store: `http://nemodatastore-sample.{namespace}.svc.cluster.local:8000`
 - Entity Store: `http://nemoentitystore-sample.{namespace}.svc.cluster.local:8000`
 - Evaluator: `http://nemoevaluator-sample.{namespace}.svc.cluster.local:8000`
 - LlamaStack: `http://llamastack.{namespace}.svc.cluster.local:8321`
-
-**Local Mode** (with port-forwards):
-- Data Store: `http://localhost:8001`
-- Entity Store: `http://localhost:8002`
-- Evaluator: `http://localhost:8004`
-- LlamaStack: `http://localhost:8321`
 
 ## Customization
 
@@ -285,8 +310,7 @@ The notebook automatically detects if LlamaStack is available and initializes th
 ## Files
 
 - `llm-as-a-judge-tutorial.ipynb` - Main tutorial notebook
-- `config.py` - Configuration file (auto-detects local vs cluster)
+- `config.py` - Configuration file (cluster mode)
 - `requirements.txt` - Python dependencies
-- `port-forward.sh` - Port-forward script for local development
 - `data/doctor_consults_with_summaries.jsonl` - Sample dataset
 

@@ -30,28 +30,41 @@ spec:
         "app.kubernetes.io/instance": "nemo-llamastack"
       annotations:
         "openshift.io/scc": "nonroot"
+        "sidecar.istio.io/inject": "true"
     spec:
+      serviceAccountName: {{ .Values.llamastack.serviceAccountName }}
       containers:
         - name: llamastack-ctr
           image: {{ .Values.llamastack.image.repository }}:{{ .Values.llamastack.image.tag }}
           imagePullPolicy: {{ .Values.llamastack.image.pullPolicy }}
+          {{- if .Values.llamastack.useBearerToken }}
+          command: ["/bin/bash", "/app/start-llamastack.sh"]
+          {{- else }}
           command: ["llama", "stack", "run"]
           args:
             - "/app/my-run.yaml"
             - "--port"
             - "$(LLAMA_STACK_PORT)"
+          {{- end }}
           volumeMounts:
             - name: run-config
               mountPath: /app/my-run.yaml
               subPath: run.yaml
+            {{- if .Values.llamastack.useBearerToken }}
+            - name: start-script
+              mountPath: /app/start-llamastack.sh
+              subPath: start-llamastack.sh
+            {{- end }}
           env:
+            {{- if not .Values.llamastack.useBearerToken }}
             - name: NVIDIA_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.llamastack.ngcAPISecret.name }}
                   key: {{ .Values.llamastack.ngcAPISecret.key }}
+            {{- end }}
             - name: NVIDIA_BASE_URL
-              value: "http://{{ .Values.nimPipeline.serviceName }}.{{ .Values.namespace.name }}.svc.cluster.local:8000"
+              value: "http://{{ .Values.llamastack.inferenceServicePredictor }}.{{ .Values.namespace.name }}.svc.cluster.local:80"
             - name: NVIDIA_DATASETS_URL
               value: "http://{{ .Values.datastore.name }}.{{ .Values.namespace.name }}.svc.cluster.local:8000"
             - name: NVIDIA_DATASET_NAMESPACE
@@ -70,6 +83,13 @@ spec:
               value: {{ .Values.llamastack.inferenceModel | quote }}
             - name: SAFETY_MODEL
               value: {{ .Values.llamastack.safetyModel | quote }}
+            {{- if .Values.llamastack.useBearerToken }}
+            - name: NVIDIA_SERVICE_ACCOUNT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: anemo-rhoai-model-sa-token-secret
+                  key: token
+            {{- end }}
             - name: LLAMA_STACK_PORT
               value: {{ .Values.llamastack.port | quote }}
             - name: NVIDIA_OUTPUT_MODEL_DIR
@@ -85,6 +105,12 @@ spec:
         - name: run-config
           configMap:
             name: {{ .Values.llamastack.configMapName }}
+        {{- if .Values.llamastack.useBearerToken }}
+        - name: start-script
+          configMap:
+            name: {{ .Values.llamastack.configMapName }}
+            defaultMode: 0755
+        {{- end }}
       imagePullSecrets:
         - name: {{ .Values.llamastack.pullSecret }}
 {{- end }}

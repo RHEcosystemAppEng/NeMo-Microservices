@@ -20,7 +20,6 @@ install:
   datastore: true
   entityStore: true
   customizer: true
-  jupyter: true
   guardrail: true
   evaluator: true
   volcano: true
@@ -356,29 +355,6 @@ evaluator-milvus:
   serviceAccount:
     create: false
     name: milvus
-
-# ===== Jupyter Configuration (Kubernetes manifests, not Helm chart) =====
-jupyter:
-  enabled: true
-  token: token
-  image: jupyter/base-notebook:latest
-  deploymentName: jupyter-notebook
-  serviceName: jupyter-service
-  pvcName: jupyter-pvc
-  configName: config.py
-  notebookName: e2e-notebook.ipynb
-  notebookContent: ""
-  configContent: ""
-  storage:
-    size: 5Gi
-    mountPath: /home/jovyan/work
-  resources:
-    requests:
-      cpu: 100m
-      memory: 512Mi
-    limits:
-      cpu: 1000m
-      memory: 2Gi
 
 # ===== Argo Service Account (for OpenShift RBAC) =====
 argo:
