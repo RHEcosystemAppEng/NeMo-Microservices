@@ -1,9 +1,18 @@
 {{- if and .Values.llamastack.enabled .Values.llamastack.useBearerToken }}
+{{- /* Auto-construct serviceAccountName from inferenceServiceName if not explicitly set */}}
+{{- $serviceAccountName := .Values.llamastack.serviceAccountName }}
+{{- if not $serviceAccountName }}
+  {{- if .Values.llamastack.inferenceServiceName }}
+    {{- $serviceAccountName = printf "%s-sa" .Values.llamastack.inferenceServiceName }}
+  {{- else }}
+    {{- fail "Either llamastack.serviceAccountName or llamastack.inferenceServiceName must be set" }}
+  {{- end }}
+{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ .Values.llamastack.serviceAccountName }}-token-reader
+  name: {{ $serviceAccountName }}-token-reader
   namespace: {{ .Values.namespace.name }}
   labels:
     app.kubernetes.io/instance: {{ .Release.Name }}
@@ -11,23 +20,23 @@ metadata:
 rules:
 - apiGroups: [""]
   resources: ["secrets"]
-  resourceNames: ["{{ .Values.llamastack.serviceAccountName }}-token-secret"]
+  resourceNames: ["{{ $serviceAccountName }}-token-secret"]
   verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ .Values.llamastack.serviceAccountName }}-token-reader
+  name: {{ $serviceAccountName }}-token-reader
   namespace: {{ .Values.namespace.name }}
   labels:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
 subjects:
 - kind: ServiceAccount
-  name: {{ .Values.llamastack.serviceAccountName }}
+  name: {{ $serviceAccountName }}
   namespace: {{ .Values.namespace.name }}
 roleRef:
   kind: Role
-  name: {{ .Values.llamastack.serviceAccountName }}-token-reader
+  name: {{ $serviceAccountName }}-token-reader
   apiGroup: rbac.authorization.k8s.io
 {{- end }}

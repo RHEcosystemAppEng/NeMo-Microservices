@@ -356,22 +356,48 @@ llamastack:
   datasetNamespace: "nvidia-e2e-tutorial"
   projectId: "llamastack-project"
   guardrailsConfigId: "demo-self-check-input-output"
+  # Inference model identifier (optional - defaults to a common model name)
+  # This is used by LlamaStack for model identification in its API
+  # If not specified, defaults to "meta/llama-3.2-1b-instruct"
+  # Only override if you need a different model identifier
   inferenceModel: "meta/llama-3.2-1b-instruct"
+  # Safety model identifier (for guardrails)
   safetyModel: "meta/llama-3.2-1b-instruct"
   outputModelDir: "nvidia-e2e-tutorial/test-messages-model@v1"
+  # REQUIRED: KServe InferenceService name (without -predictor suffix)
+  # This is the name of your InferenceService resource
+  # Example: anemo-rhoai-model1
+  # The template will automatically construct:
+  #   - Service account name: <inferenceServiceName>-sa
+  #   - Predictor service name: <inferenceServiceName>-predictor
+  # Example: If inferenceServiceName is "anemo-rhoai-model1", then:
+  #   - serviceAccountName will be "anemo-rhoai-model1-sa"
+  #   - inferenceServicePredictor will be "anemo-rhoai-model1-predictor"
+  inferenceServiceName: "anemo-rhoai-model1"
+  # InferenceService namespace (optional)
+  # If not set, defaults to the main namespace (namespace.name)
+  # Only set this if your InferenceService is in a different namespace
+  inferenceServiceNamespace: ""
   # Service account name for LlamaStack (typically created by InferenceService)
   # Format: <inferenceservice-name>-sa
-  # Example: anemo-rhoai-model-sa
-  # Set this to match your InferenceService's service account name
-  serviceAccountName: "anemo-rhoai-model-sa"
+  # If not set, will be auto-constructed from inferenceServiceName as: <inferenceServiceName>-sa
+  # Only override this if your service account has a different naming convention
+  serviceAccountName: ""
   # Whether to create the service account (set to false if InferenceService creates it)
   # Default: false (InferenceService typically creates the service account)
   createServiceAccount: false
   # KServe InferenceService predictor service name (cluster-internal)
   # This is the stable service name that routes to the latest revision
   # Format: <inferenceservice-name>-predictor
-  # Example: anemo-rhoai-model-predictor
-  inferenceServicePredictor: "anemo-rhoai-model-predictor"
+  # If not set, will be auto-constructed from inferenceServiceName as: <inferenceServiceName>-predictor
+  # Only override this if your service has a different naming convention
+  inferenceServicePredictor: ""
+  # Direct override for NVIDIA_BASE_URL (optional, advanced)
+  # If set, this will be used instead of auto-constructing from inferenceServicePredictor
+  # Format: http://<service-name>.<namespace>.svc.cluster.local:<port>
+  # Example: http://my-model-predictor.my-namespace.svc.cluster.local:80
+  # If not set, will be auto-constructed from inferenceServicePredictor and namespace
+  nvidiaBaseURL: ""
   # Use Bearer token authentication instead of API key for KServe InferenceService
   # Set to true when using KServe InferenceService that requires service account token
   useBearerToken: true

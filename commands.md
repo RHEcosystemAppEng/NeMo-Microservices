@@ -211,22 +211,31 @@ oc get sa $SERVICE_ACCOUNT_NAME -n $NAMESPACE
 After your InferenceService is deployed and the service account exists, enable LlamaStack:
 
 ```bash
-# Get InferenceService name and service account name
+# Get InferenceService name
 export INFERENCESERVICE_NAME=$(oc get inferenceservice -n $NAMESPACE -o jsonpath='{.items[0].metadata.name}')
-export SERVICE_ACCOUNT_NAME="${INFERENCESERVICE_NAME}-sa"
 
-# Verify service account exists
+# Verify service account exists (auto-created by InferenceService)
+export SERVICE_ACCOUNT_NAME="${INFERENCESERVICE_NAME}-sa"
 oc get sa $SERVICE_ACCOUNT_NAME -n $NAMESPACE
 
 # Enable LlamaStack
+# Only need to provide inferenceServiceName - everything else is auto-constructed
 cd NeMo-Microservices/deploy/nemo-instances
 helm upgrade nemo-instances . -n $NAMESPACE \
   --set namespace.name=$NAMESPACE \
   --set llamastack.enabled=true \
-  --set llamastack.serviceAccountName=$SERVICE_ACCOUNT_NAME \
+  --set llamastack.inferenceServiceName=$INFERENCESERVICE_NAME \
   --set llamastack.createServiceAccount=false \
   --reuse-values
 ```
+
+**Note**: 
+- Only `llamastack.inferenceServiceName` is required (the Kubernetes resource name, e.g., `anemo-rhoai-model1`)
+- The template auto-constructs:
+  - Service account name: `<inferenceServiceName>-sa`
+  - Predictor service name: `<inferenceServiceName>-predictor`
+  - Service URL: `http://<inferenceServiceName>-predictor.<namespace>.svc.cluster.local:80`
+  - RBAC resources (Role, RoleBinding): `<inferenceServiceName>-sa-token-reader`
 
 **Verify LlamaStack is running:**
 ```bash
@@ -553,6 +562,38 @@ oc delete pod <llamastack-pod-name> -n $NAMESPACE
 ```
 
 **Note**: This error is typically a timing issue. The Helm chart creates the secret, but Kubernetes needs the service account to exist first (created by InferenceService) to populate the token. The pod will automatically retry once the secret is populated.
+
+### LlamaStack RBAC RoleBinding Error
+
+If you encounter an error like:
+```
+Error: UPGRADE FAILED: failed to create resource: RoleBinding.rbac.authorization.k8s.io "-token-reader" is invalid: subjects[0].name: Required value
+```
+
+This indicates that the service account name was not properly set. **Solution**:
+
+1. **Ensure you're using `llamastack.inferenceServiceName`** (not `llamastack.serviceAccountName`):
+   ```bash
+   helm upgrade nemo-instances . -n $NAMESPACE \
+     --set namespace.name=$NAMESPACE \
+     --set llamastack.enabled=true \
+     --set llamastack.inferenceServiceName=$INFERENCESERVICE_NAME \
+     --set llamastack.createServiceAccount=false \
+     --reuse-values
+   ```
+
+2. **Verify the InferenceService name is correct**:
+   ```bash
+   export INFERENCESERVICE_NAME=$(oc get inferenceservice -n $NAMESPACE -o jsonpath='{.items[0].metadata.name}')
+   echo "Using InferenceService: $INFERENCESERVICE_NAME"
+   ```
+
+3. **The template auto-constructs all RBAC resources** (Role, RoleBinding) from `inferenceServiceName`:
+   - Service account name: `<inferenceServiceName>-sa`
+   - Role name: `<inferenceServiceName>-sa-token-reader`
+   - RoleBinding name: `<inferenceServiceName>-sa-token-reader`
+
+**Note**: The RBAC template automatically constructs the service account name from `inferenceServiceName`. You should not need to set `llamastack.serviceAccountName` manually unless you're using a custom service account name.
 
 ### Pod Stuck in Pending State (Missing GPU Tolerations)
 
