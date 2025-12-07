@@ -1,4 +1,27 @@
 {{- if .Values.llamastack.enabled }}
+{{- /* Auto-construct serviceAccountName from inferenceServiceName if not explicitly set */}}
+{{- $serviceAccountName := .Values.llamastack.serviceAccountName }}
+{{- if not $serviceAccountName }}
+  {{- if .Values.llamastack.inferenceServiceName }}
+    {{- $serviceAccountName = printf "%s-sa" .Values.llamastack.inferenceServiceName }}
+  {{- else }}
+    {{- fail "Either llamastack.serviceAccountName or llamastack.inferenceServiceName must be set" }}
+  {{- end }}
+{{- end }}
+{{- /* Auto-construct inferenceServicePredictor from inferenceServiceName if not explicitly set */}}
+{{- $inferenceServicePredictor := .Values.llamastack.inferenceServicePredictor }}
+{{- if not $inferenceServicePredictor }}
+  {{- if .Values.llamastack.inferenceServiceName }}
+    {{- $inferenceServicePredictor = printf "%s-predictor" .Values.llamastack.inferenceServiceName }}
+  {{- else }}
+    {{- fail "Either llamastack.inferenceServicePredictor or llamastack.inferenceServiceName must be set" }}
+  {{- end }}
+{{- end }}
+{{- /* Determine InferenceService namespace (defaults to main namespace) */}}
+{{- $inferenceServiceNamespace := .Values.llamastack.inferenceServiceNamespace }}
+{{- if not $inferenceServiceNamespace }}
+  {{- $inferenceServiceNamespace = .Values.namespace.name }}
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -32,7 +55,7 @@ spec:
         "openshift.io/scc": "nonroot"
         "sidecar.istio.io/inject": "true"
     spec:
-      serviceAccountName: {{ .Values.llamastack.serviceAccountName }}
+      serviceAccountName: {{ $serviceAccountName }}
       containers:
         - name: llamastack-ctr
           image: {{ .Values.llamastack.image.repository }}:{{ .Values.llamastack.image.tag }}
@@ -64,7 +87,12 @@ spec:
                   key: {{ .Values.llamastack.ngcAPISecret.key }}
             {{- end }}
             - name: NVIDIA_BASE_URL
-              value: "http://{{ .Values.llamastack.inferenceServicePredictor }}.{{ .Values.namespace.name }}.svc.cluster.local:80"
+              {{- if .Values.llamastack.nvidiaBaseURL }}
+              value: {{ .Values.llamastack.nvidiaBaseURL | quote }}
+              {{- else }}
+              # Auto-constructed from inferenceServicePredictor and namespace
+              value: "http://{{ $inferenceServicePredictor }}.{{ $inferenceServiceNamespace }}.svc.cluster.local:80"
+              {{- end }}
             - name: NVIDIA_DATASETS_URL
               value: "http://{{ .Values.datastore.name }}.{{ .Values.namespace.name }}.svc.cluster.local:8000"
             - name: NVIDIA_DATASET_NAMESPACE
@@ -87,7 +115,7 @@ spec:
             - name: NVIDIA_SERVICE_ACCOUNT_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: anemo-rhoai-model-sa-token-secret
+                  name: {{ $serviceAccountName }}-token-secret
                   key: token
             {{- end }}
             - name: LLAMA_STACK_PORT
