@@ -228,6 +228,8 @@ The notebook uses `config.py` which:
 
 ### 1. Document Ingestion
 - Upload documents (PDFs, text files, etc.) to NeMo Data Store
+- **Register dataset using LlamaStack's `client.beta.datasets.register()` API** for Data Store
+- **Register dataset in Entity Store** using direct HTTP API (required for some NeMo services)
 - Documents are stored in a namespace for organization
 
 ### 2. Embedding Generation
@@ -347,18 +349,63 @@ oc exec -n <your-namespace> <llamastack-pod> -- curl -s http://<predictor-servic
 
 ## LlamaStack Integration
 
-This demo uses **LlamaStack** for chat completions, providing a unified API abstraction layer over NeMo microservices. The integration:
+This demo uses **LlamaStack** for both chat completions and dataset registration, providing a unified API abstraction layer over NeMo microservices. The integration:
 
 - **Uses LlamaStack client** for chat completions (with automatic fallback to direct NIM if LlamaStack is unavailable)
+- **Uses LlamaStack's `client.beta.datasets.register()` API** for Data Store dataset registration
+- **Uses direct HTTP requests** for Entity Store dataset registration (required for some NeMo services like Customizer and Evaluator)
+- **Uses direct HTTP requests** for Data Store namespace operations (namespace creation)
 - **Uses direct NIM calls** for embeddings (as LlamaStack may not expose embeddings API directly)
-- **Maintains backward compatibility** - works even if LlamaStack service is not deployed
+- **Maintains backward compatibility** - works even if LlamaStack service is not deployed (with reduced functionality)
+
+### Dataset Registration with LlamaStack
+
+The demo uses LlamaStack's dataset registration API for Data Store:
+
+```python
+response = client.beta.datasets.register(
+    purpose="post-training/messages",
+    dataset_id=DATASET_NAME,
+    source={
+        "type": "uri",
+        "uri": f"hf://datasets/{NMS_NAMESPACE}/{DATASET_NAME}"
+    },
+    metadata={
+        "format": "json",
+        "description": f"RAG tutorial documents for {DATASET_NAME}",
+        "provider_id": "nvidia",
+    }
+)
+```
+
+This registers the dataset in Data Store using the `hf://datasets/` URI format, which references Data Store's HuggingFace-compatible API.
+
+### Entity Store Registration
+
+Entity Store registration is still done via direct HTTP API, as LlamaStack's client API does not expose Entity Store operations:
+
+```python
+response = requests.post(
+    f"{ENTITY_STORE_URL}/v1/datasets",
+    json={
+        "name": DATASET_NAME,
+        "namespace": NMS_NAMESPACE,
+        "description": f"RAG tutorial documents for {DATASET_NAME}",
+        "files_url": f"hf://datasets/{NMS_NAMESPACE}/{DATASET_NAME}",
+        "project": "rag-tutorial",
+        "format": "json",
+    },
+)
+```
+
+Entity Store registration is required for some NeMo services (like Customizer and Evaluator) that need to reference datasets by their Entity Store ID.
 
 ### LlamaStack Benefits
 
 - **Type safety**: Pydantic models instead of raw JSON
-- **Unified API**: Single client for multiple NeMo services
+- **Unified API**: Single client for inference operations
 - **Better error handling**: Typed exceptions
-- **Simplified code**: Less boilerplate than direct REST calls
+- **Simplified code**: Less boilerplate than direct REST calls for chat completions
 
 ## Files
 
