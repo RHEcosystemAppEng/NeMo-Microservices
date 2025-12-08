@@ -1,0 +1,18 @@
+{{- if and .Values.evaluator.enabled .Values.evaluator.destinationRule.enabled }}
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: {{ .Values.evaluator.name }}-plaintext
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    component: evaluator
+spec:
+  host: {{ .Values.evaluator.name }}.{{ .Values.namespace.name }}.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: DISABLE
+{{- end }}
+

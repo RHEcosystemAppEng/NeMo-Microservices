@@ -206,6 +206,10 @@ evaluator:
   otel:
     enabled: true
     # exporterOtlpEndpoint will be templated in the template file
+  # DestinationRule for TLS/mTLS configuration
+  # Set to true to disable TLS for evaluator service (required for some Istio configurations)
+  destinationRule:
+    enabled: true
   # Environment variables for the evaluator pod
   # NIM_PROXY_URL points to the NIM service for evaluation jobs
   # Configure via evaluator.nimProxy section below (for NIM deployed via RHOAI/OpenShift AI)

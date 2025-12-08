@@ -811,6 +811,33 @@ oc get pods -n $NAMESPACE
 oc delete pod <pod-name> -n $NAMESPACE --force --grace-period=0
 ```
 
+### TLS/mTLS Issues with Evaluator
+
+If you encounter TLS/mTLS connection issues with the evaluator service, you may need to disable TLS for the evaluator service using an Istio DestinationRule.
+
+**The Helm chart now includes this fix by default** (enabled in `values.yaml`). If you need to apply it manually:
+
+```bash
+# Create DestinationRule to disable TLS for evaluator
+cat <<EOF | oc apply -f -
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: nemoevaluator-sample-plaintext
+  namespace: $NAMESPACE
+spec:
+  host: nemoevaluator-sample.$NAMESPACE.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: DISABLE
+EOF
+
+# Verify the DestinationRule was created
+oc get destinationrule -n $NAMESPACE | grep evaluator
+```
+
+**Note**: This is automatically applied when deploying with Helm if `evaluator.destinationRule.enabled: true` is set in `values.yaml` (which is the default).
+
 ### Clean Up PVCs (Optional)
 
 PVCs are retained by default to preserve data. To delete them:
