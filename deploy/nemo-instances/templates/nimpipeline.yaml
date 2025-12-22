@@ -1,0 +1,45 @@
+{{- if .Values.nimPipeline.enabled }}
+apiVersion: apps.nvidia.com/v1alpha1
+kind: NIMPipeline
+metadata:
+  name: {{ .Values.nimPipeline.name }}
+  namespace: {{ .Values.namespace.name }}
+spec:
+  services:
+    - name: {{ .Values.nimPipeline.serviceName }}
+      enabled: true
+      spec:
+        env:
+          - name: NIM_PEFT_SOURCE
+            value: http://{{ .Values.entitystore.name }}.{{ .Values.namespace.name }}.svc.cluster.local:8000
+          - name: NIM_PEFT_REFRESH_INTERVAL
+            value: "180"
+          - name: NIM_MAX_CPU_LORAS
+            value: "16"
+          - name: NIM_MAX_GPU_LORAS
+            value: "8"
+          - name: NIM_GUIDED_DECODING_BACKEND
+            value: fast_outlines
+        image:
+          repository: {{ .Values.nimPipeline.image.repository }}
+          tag: {{ .Values.nimPipeline.image.tag | quote }}
+          pullPolicy: {{ .Values.nimPipeline.image.pullPolicy }}
+          pullSecrets:
+          - {{ .Values.nimPipeline.pullSecret }}
+        authSecret: {{ .Values.nimPipeline.authSecret }}
+        storage:
+          nimCache:
+            name: {{ .Values.nimPipeline.nimCacheName }}
+            profile: ''
+        replicas: {{ .Values.nimPipeline.replicas }}
+        resources:
+          limits:
+            nvidia.com/gpu: {{ .Values.nimPipeline.resources.limits.gpu }}
+        # GPU node tolerations for OpenShift/Kubernetes clusters with tainted GPU nodes
+        tolerations:
+{{- toYaml .Values.nimPipeline.tolerations | nindent 10 }}
+        expose:
+          service:
+            type: ClusterIP
+            port: 8000
+{{- end }}
