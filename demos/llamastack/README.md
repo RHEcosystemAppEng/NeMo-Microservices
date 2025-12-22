@@ -164,9 +164,39 @@ client = LlamaStackClient(base_url="http://llamastack.<namespace>.svc.cluster.lo
 # Run inference, evaluations, safety checks, etc.
 ```
 
+## Important: RHOAI InferenceService Limitation
+
+### E2E Workflow Compatibility
+
+NeMo Microservices enables a complete workflow:
+1. **Evaluate the base model** ✅
+2. **Fine-tune the model** (using Customizer) ✅
+3. **Evaluate the fine-tuned model** ❌ (Issue when using InferenceService)
+4. **Apply guardrails** ✅
+
+### The Problem with RHOAI-Deployed Models
+
+**Step #3 (Evaluating Fine-Tuned Models) fails when using RHOAI InferenceService.**
+
+**Why?**
+- RHOAI deploys models as `InferenceService` (KServe/ModelMesh)
+- NeMo NIM deployed via `NIMPipeline` supports dynamic LoRA adapter loading
+- `InferenceService` **cannot** dynamically load LoRA adapters from Entity Store
+
+**What This Means:**
+- ✅ **Fine-tuning works** - Customizer trains LoRA adapters successfully with any base model
+- ❌ **Serving fine-tuned model fails** - RHOAI InferenceService cannot load the trained adapter
+
+### Solution
+
+For the complete E2E workflow, deploy models using **NIMPipeline** (not RHOAI InferenceService):
+- See [Deploying Custom model.md](./Deploying%20Custom%20model.md) for instructions
+- NIMPipeline supports dynamic LoRA loading via `NIM_PEFT_SOURCE` environment variable
+
 ## Troubleshooting
 
 - **Deployment Issues**: Check pod logs with `oc logs -f deployment/llamastack`
 - **Service Connectivity**: Verify NeMo microservices are running and accessible
 - **Model Loading**: Ensure base models are available in NIM
 - **API Keys**: Confirm NGC and Hugging Face tokens are valid
+- **Fine-Tuned Model Evaluation Fails**: Verify model is deployed via NIMPipeline, not RHOAI InferenceService (see above)
