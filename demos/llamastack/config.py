@@ -1,15 +1,11 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the terms described in the LICENSE file in
-# the root directory of this source tree.
-
 # (Required) NeMo Microservices URLs
-NDS_URL = "http://localhost:8001" # Data Store
-ENTITY_STORE_URL = "http://localhost:8002" # Entity Store
-NEMO_URL = "http://localhost:8003" # Customizer (also available at 8004 for Evaluator, 8005 for Guardrails)
-NIM_URL = "http://localhost:8006" # NIM
-LLAMASTACK_URL = "http://localhost:8321" # LlamaStack Server
+NDS_URL = "http://nemodatastore-sample.<your-namespace>.svc.cluster.local:8000" # Data Store
+ENTITY_STORE_URL = "http://nemoentitystore-sample.<your-namespace>.svc.cluster.local:8000" # Entity Store
+NEMO_URL = "http://nemocustomizer-sample.<your-namespace>.svc.cluster.local:8000" # Customizer 
+EVAL_URL = "http://nemoevaluator-sample.<your-namespace>.svc.cluster.local:8000" # Evaluator
+GUARDRAILS_URL = "http://nemoguardrails-sample.<your-namespace>.svc.cluster.local:8000" # Guardrails
+NIM_URL = "http://meta-llama3-1b-instruct.<your-namespace>.svc.cluster.local:8000" # NIM
+LLAMASTACK_URL = "http://llamastack.<your-namespace>.svc.cluster.local:8321" # LlamaStack Server
 
 # (Required) Configure the base model. Must be one supported by the NeMo Customizer deployment!
 BASE_MODEL = "meta/llama-3.2-1b-instruct"
