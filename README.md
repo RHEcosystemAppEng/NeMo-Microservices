@@ -358,6 +358,11 @@ This repository includes several demo notebooks and tutorials:
    - End-to-end flow using LlamaStack for unified API access
    - 📖 [Full documentation](demos/llamastack/README.md)
 
+4. **NeMo Retriever Demo** - [`demos/retriever/`](demos/retriever/)
+   - Use NeMo Retriever for text reranking to improve RAG pipeline quality
+   - Demonstrate reranking API usage and RAG integration
+   - 📖 [Full documentation](demos/retriever/README.md)
+
 ### Quick Command Reference
 
 For a concise command reference covering infrastructure deployment, configuration, and running demos, see [commands.md](commands.md).
