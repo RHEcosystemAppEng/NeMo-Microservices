@@ -3,6 +3,7 @@
 This guide provides essential commands to deploy and configure NeMo Microservices on OpenShift. For detailed explanations, see the respective demo READMEs:
 - [RAG Demo](demos/rag/README.md)
 - [LLM-as-a-Judge Demo](demos/custom-llm-as-a-judge/README.md)
+- [NeMo Retriever Demo](demos/retriever/README.md)
 
 ## Quick Setup
 
@@ -135,10 +136,17 @@ oc get pods -n $NAMESPACE | grep -E "datastore|entitystore|customizer|evaluator|
 
 ```bash
 # Check all NeMo service pods
-oc get pods -n $NAMESPACE | grep -E "datastore|entitystore|customizer|evaluator|guardrail"
+oc get pods -n $NAMESPACE | grep -E "datastore|entitystore|customizer|evaluator|guardrail|rerankqa"
 
 # Check Custom Resources
 oc get nemodatastore,nemoentitystore,nemocustomizer,nemoevaluator,nemoguardrail -n $NAMESPACE
+
+# Check NIM services (embedding and retriever)
+oc get nimcache,nimpipeline -n $NAMESPACE
+
+# Verify retriever service specifically
+oc get svc nv-rerankqa-1b-v2 -n $NAMESPACE
+oc get pods -n $NAMESPACE | grep rerankqa
 ```
 
 ### 4. Deploy InferenceService Manually
@@ -313,6 +321,9 @@ oc get svc -n $NAMESPACE | grep predictor
 # Find Embedding NIM service
 oc get svc -n $NAMESPACE | grep embedqa
 
+# Find Retriever NIM service
+oc get svc -n $NAMESPACE | grep rerankqa
+
 # Find LlamaStack service
 oc get svc -n $NAMESPACE | grep llamastack
 
@@ -390,6 +401,54 @@ JUPYTER_POD=$(oc get pods -n $NAMESPACE -l app=jupyter-notebook -o jsonpath='{.i
 
 # Copy files to pod
 oc cp rag-tutorial.ipynb $JUPYTER_POD:/work -n $NAMESPACE
+oc cp config.py $JUPYTER_POD:/work -n $NAMESPACE
+oc cp env.donotcommit $JUPYTER_POD:/work -n $NAMESPACE
+
+# Port-forward Jupyter
+oc port-forward -n $NAMESPACE svc/jupyter-service 8888:8888
+```
+
+Access: http://localhost:8888 (token: `token`)
+
+## Running Retriever Demo
+
+### 1. Configure Retriever Demo
+```bash
+cd NeMo-Microservices/demos/retriever
+cp env.donotcommit.example env.donotcommit
+```
+
+Edit `env.donotcommit` and set:
+```bash
+NMS_NAMESPACE=<namespace>
+```
+
+**Optional Configuration:**
+```bash
+RETRIEVER_TOP_K=10  # Number of documents to rerank
+RETRIEVER_TOP_N=5   # Number of top results to return after reranking
+```
+
+### 2. Verify Retriever Service is Deployed
+```bash
+# Check retriever service
+oc get svc -n $NAMESPACE | grep rerankqa
+
+# Check retriever pods
+oc get pods -n $NAMESPACE | grep rerankqa
+
+# Check NIMCache and NIMPipeline
+oc get nimcache nv-rerankqa-1b-v2 -n $NAMESPACE
+oc get nimpipeline retriever-rerankqa-pipeline -n $NAMESPACE
+```
+
+### 3. Run in Workbench/Notebook (Cluster Mode)
+```bash
+# Get Jupyter pod name
+JUPYTER_POD=$(oc get pods -n $NAMESPACE -l app=jupyter-notebook -o jsonpath='{.items[0].metadata.name}')
+
+# Copy files to pod
+oc cp retriever-tutorial.ipynb $JUPYTER_POD:/work -n $NAMESPACE
 oc cp config.py $JUPYTER_POD:/work -n $NAMESPACE
 oc cp env.donotcommit $JUPYTER_POD:/work -n $NAMESPACE
 
@@ -688,6 +747,7 @@ echo "🧹 Cleaning up orphaned resources..."
 
 # Delete any remaining Custom Resources (orphans)
 # Note: NIMService resources may have finalizers - remove them first if deletion fails
+# This includes retriever NIMCache (nv-rerankqa-1b-v2) and NIMPipeline (retriever-rerankqa-pipeline)
 oc delete nemocustomizer,nemodatastore,nemoentitystore,nemoevaluator,nemoguardrail,nimcache,nimpipeline,nimservice,inferenceservice --all -n $NAMESPACE --ignore-not-found=true --wait=false
 
 # If NIMService deletion fails due to finalizers, remove them manually:
@@ -766,6 +826,8 @@ oc scale deployment -l app.kubernetes.io/instance=nemo-instances -n $NAMESPACE -
 # Step 2: Delete Custom Resources first (CRITICAL - must be done first)
 echo "🗑️  Deleting Custom Resources..."
 oc delete nemocustomizer,nemodatastore,nemoentitystore,nemoevaluator,nemoguardrail,nimcache,nimpipeline,inferenceservice --all -n $NAMESPACE --ignore-not-found=true
+
+# Note: This includes retriever NIMCache (nv-rerankqa-1b-v2) and NIMPipeline (retriever-rerankqa-pipeline)
 
 # Step 3: Wait for pods to terminate
 echo "⏳ Waiting for pods to terminate..."
@@ -876,6 +938,7 @@ oc delete pvc <pvc-name> -n $NAMESPACE
 | Evaluator | `nemoevaluator-sample` | 8000 |
 | Guardrails | `nemoguardrails-sample` | 8000 |
 | Embedding NIM | `nv-embedqa-1b-v2` | 8000 |
+| Retriever NIM | `nv-rerankqa-1b-v2` | 8000 |
 | LlamaStack | `llamastack` | 8321 |
 | Chat NIM | `<inferenceservice-name>-predictor` | 80 |
 
