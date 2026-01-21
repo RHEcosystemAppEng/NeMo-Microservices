@@ -1,6 +1,11 @@
 # NeMo Infrastructure Helm Chart Values
 # Replicates the exact Ansible deployment from QUICK-START-OpenShift.md
 
+# Global settings
+global:
+  security:
+    allowInsecureImages: true  # Allow custom images (PostgreSQL, MinIO, Python, etc.)
+
 # Installation namespace
 namespace:
   create: false
@@ -41,7 +46,7 @@ datastore-postgresql:
       accessModes:
         - ReadWriteOnce
       enabled: true
-      size: 500Mi
+      size: 2Gi  # Increased from 500Mi for better working setup
 
 # ===== Entity Store PostgreSQL Subchart =====
 entity-store-postgresql:
@@ -60,7 +65,7 @@ entity-store-postgresql:
       accessModes:
         - ReadWriteOnce
       enabled: true
-      size: 500Mi
+      size: 2Gi  # Increased from 500Mi for better working setup
 
 # ===== Customizer PostgreSQL Subchart =====
 customizer-postgresql:
@@ -79,7 +84,7 @@ customizer-postgresql:
       accessModes:
         - ReadWriteOnce
       enabled: true
-      size: 500Mi
+      size: 2Gi  # Increased from 500Mi for better working setup
 
 # ===== Guardrail PostgreSQL Subchart =====
 guardrail-postgresql:
@@ -98,7 +103,7 @@ guardrail-postgresql:
       accessModes:
         - ReadWriteOnce
       enabled: true
-      size: 500Mi
+      size: 2Gi  # Increased from 500Mi for better working setup
 
 # ===== Evaluator PostgreSQL Subchart =====
 evaluator-postgresql:
@@ -117,7 +122,7 @@ evaluator-postgresql:
       accessModes:
         - ReadWriteOnce
       enabled: true
-      size: 500Mi
+      size: 2Gi  # Increased from 500Mi for better working setup
 
 # ===== Customizer MLflow Subchart =====
 customizer-mlflow:
@@ -152,13 +157,12 @@ customizer-mlflow:
     enableDefaultInitContainers: false
     provisioning:
       enabled: false
+    # Note: MINIO_DEFAULT_BUCKETS is set via defaultBuckets above, don't duplicate in extraEnvVars
     extraEnvVars:
       - name: MINIO_ROOT_USER
         value: "minioadmin"
       - name: MINIO_ROOT_PASSWORD
         value: "minioadmin"
-      - name: MINIO_DEFAULT_BUCKETS
-        value: "mlflow"
     command:
       - "/usr/bin/docker-entrypoint.sh"
     args:
@@ -189,7 +193,7 @@ customizer-mlflow:
     persistence:
       enabled: true
       storageClass: "gp3-csi"
-      size: 8Gi
+      size: 20Gi  # Increased from 8Gi for MLflow artifacts storage
     command:
       - /bin/sh
       - -c
@@ -211,7 +215,7 @@ customizer-opentelemetry:
   mode: deployment
   image:
     repository: "otel/opentelemetry-collector-k8s"
-    tag: "0.102.1"
+    tag: "0.143.0"
   config:
     receivers:
       otlp:
@@ -251,7 +255,7 @@ evaluator-opentelemetry:
   mode: deployment
   image:
     repository: "otel/opentelemetry-collector-k8s"
-    tag: "0.102.1"
+    tag: "0.143.0"
   config:
     receivers:
       otlp:
@@ -326,19 +330,24 @@ evaluator-milvus:
   serviceName: milvus
   cluster:
     enabled: false
+  # Disable all external dependencies - use embedded etcd and local storage
   etcd:
     enabled: false
   pulsar:
+    enabled: false
+  pulsarv3:
     enabled: false
   minio:
     enabled: false
     tls:
       enabled: false
+  # Use standalone mode with embedded etcd
   standalone:
+    enabled: true
     persistence:
       enabled: true
       persistentVolumeClaim:
-        size: 50Gi
+        size: 100Gi  # Increased from 50Gi for Milvus vector storage
         storageClass: ""
     extraEnv:
       - name: LOG_LEVEL
@@ -352,6 +361,7 @@ evaluator-milvus:
           dir: /var/lib/milvus/etcd
       common:
         storageType: local
+        messageQueue: woodpecker  # Use woodpecker (embedded) instead of pulsar
   serviceAccount:
     create: false
     name: milvus
@@ -371,7 +381,7 @@ milvus:
 # ===== Volcano Scheduler Subchart =====
 volcano:
   # Volcano chart configuration
-  # Following quickstart: helm install volcano volcano/volcano --version 1.9.0
+  # Following quickstart: helm install volcano volcano/volcano --version 1.13.1
   # Note: The privileged SCC is granted via RBAC Role/Binding in templates/volcano/oc-rbac.yaml
   # If RBAC approach doesn't work, you may need to manually run:
   # oc adm policy add-scc-to-user privileged system:serviceaccount:<namespace>:volcano-scheduler

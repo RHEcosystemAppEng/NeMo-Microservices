@@ -38,40 +38,63 @@ Deploy all infrastructure components (PostgreSQL, MLflow, Argo Workflows, Milvus
 ```bash
 cd deploy/nemo-infra
 
-# Update dependencies
+# Update dependencies (downloads all subcharts)
 helm dependency update
 
 # Deploy infrastructure
 helm install nemo-infra . \
   -n <namespace> \
-  --create-namespace
+  --create-namespace \
+  --wait \
+  --timeout 30m
 ```
 
 **Verify installation:**
 ```bash
-oc get pods -n <namespace> | grep -E "(postgresql|mlflow|volcano|argo|milvus|opentelemetry|minio)"
+oc get pods -n <namespace> | grep nemo-infra
 ```
 
-**Expected Output:**
+**Expected Output (15 pods, all Running):**
 ```
-nemo-infra-argo-workflows-server-6ccf84f45d-rnvxg                1/1     Running     0          175m
-nemo-infra-argo-workflows-workflow-controller-68d456d755-hds5p   1/1     Running     0          175m
-nemo-infra-customizer-mlflow-tracking-6787ff598-fjmmr            1/1     Running     0          175m
-nemo-infra-customizer-opentelemetry-648455b458-zq8v6             1/1     Running     0          175m
-nemo-infra-customizer-postgresql-0                               1/1     Running     0          175m
-nemo-infra-datastore-postgresql-0                                1/1     Running     0          175m
-nemo-infra-entity-store-postgresql-0                             1/1     Running     0          175m
-nemo-infra-evaluator-milvus-standalone-86599fc78f-gkhhv          1/1     Running     0          175m
-nemo-infra-evaluator-opentelemetry-577d4d757-lnlcm               1/1     Running     0          175m
-nemo-infra-evaluator-postgresql-0                                1/1     Running     0          175m
-nemo-infra-guardrail-postgresql-0                                1/1     Running     0          175m
-nemo-infra-minio-89bdcdd79-s28km                                 1/1     Running     0          175m
-nemo-infra-postgresql-0                                          1/1     Running     0          175m
+nemo-infra-admission-57fbdf685d-x5gts                           1/1     Running     0          3m23s
+nemo-infra-argo-workflows-server-7f995cbbc7-42mh5               1/1     Running     0          7m36s
+nemo-infra-argo-workflows-workflow-controller-f6548b9d9-7xrfs   1/1     Running     0          7m36s
+nemo-infra-customizer-mlflow-tracking-c8d7fb779-tnlnj           1/1     Running     0          7m36s
+nemo-infra-customizer-opentelemetry-5cfddf4989-5pr4q             1/1     Running     0          7m36s
+nemo-infra-customizer-postgresql-0                               1/1     Running     0          7m35s
+nemo-infra-datastore-postgresql-0                                1/1     Running     0          7m35s
+nemo-infra-entity-store-postgresql-0                             1/1     Running     0          7m35s
+nemo-infra-evaluator-milvus-standalone-859d889bb8-4f6p5          1/1     Running     0          7m36s
+nemo-infra-evaluator-opentelemetry-79d666d58c-z24h5             1/1     Running     0          7m36s
+nemo-infra-evaluator-postgresql-0                                1/1     Running     0          7m35s
+nemo-infra-guardrail-postgresql-0                               1/1     Running     0          7m35s
+nemo-infra-minio-647ff8cbf9-nx6kk                                1/1     Running     0          7m36s
+nemo-infra-postgresql-0                                          1/1     Running     0          7m35s
+nemo-infra-scheduler-7f468fdc5b-fvbpm                            1/1     Running     0          7m36s
 ```
 
 All pods should show `1/1 Running` status. If any pods are not running, check the troubleshooting section in [deploy/nemo-infra/README.md](deploy/nemo-infra/README.md#troubleshooting).
 
+**Component Versions (Latest Stable):**
+- PostgreSQL (Bitnami): 18.2.3
+- MLflow (Bitnami): 5.1.17
+- OpenTelemetry Collector: 0.143.0
+- Argo Workflows: 0.47.0
+- Milvus: 4.1.11 (OpenShift-compatible, uses embedded woodpecker message queue)
+- Volcano: 1.13.1
+
+**OpenShift-Specific Fixes Applied:**
+- ✅ Volcano admission-init override (SCC compatibility)
+- ✅ Milvus Pulsar disablement (embedded woodpecker queue)
+- ✅ Volcano controller security context patch
+- ✅ Default queue creation
+- ✅ Webhook failure policy (set to Ignore)
+- ✅ PodGroup status patch (auto-sets status to Inqueue)
+- ✅ PodGroup annotation controller (auto-adds annotation to worker pods)
+
 📖 **Configuration options**: [deploy/nemo-infra/README.md](deploy/nemo-infra/README.md#configuration)
+
+📖 **Clean uninstall/reinstall**: [deploy/nemo-infra/README.md](deploy/nemo-infra/README.md#installation)
 
 ### Step 2: Create Required Secrets
 

@@ -70,16 +70,63 @@ This Helm chart deploys all infrastructure components required for NVIDIA NeMo m
 
 📖 **Installation guide**: See [main README](../../README.md#installation) for complete installation instructions.
 
-**Quick reference:**
+### Quick Start
+
+**Prerequisites:**
+- OpenShift 4.x cluster
+- Helm 3.x installed
+- `oc` CLI configured and authenticated
+- Sufficient cluster resources (CPU, memory, storage)
+- Access to container registries (Docker Hub, NGC, Quay.io)
+
+**Installation steps:**
 ```bash
+# Navigate to chart directory
 cd deploy/nemo-infra
+
+# Update Helm dependencies (downloads all subcharts)
 helm dependency update
-helm install nemo-infra . -n <namespace> --create-namespace
+
+# Install infrastructure components
+helm install nemo-infra . -n <namespace> --create-namespace --wait --timeout 30m
 ```
 
 **Verify installation:**
 ```bash
-oc get pods -n <namespace> | grep -E "(postgresql|mlflow|volcano|argo|milvus|opentelemetry|minio)"
+# Check all infrastructure pods
+oc get pods -n <namespace> | grep nemo-infra
+
+# Expected output: All pods should show "Running" status
+# - PostgreSQL pods (5 instances)
+# - MLflow tracking server
+# - OpenTelemetry Collector (2 instances)
+# - Argo Workflows (server + controller)
+# - Milvus standalone
+# - Volcano Scheduler + Admission
+# - MinIO
+```
+
+**Expected pod count:** 15 pods (all running)
+
+### Clean Uninstall and Reinstall
+
+To ensure a clean deployment from scratch:
+
+```bash
+# Step 1: Uninstall existing deployment
+helm uninstall nemo-infra -n <namespace>
+
+# Step 2: Wait for resources to be cleaned up
+oc get pods -n <namespace> | grep nemo-infra
+# Wait until no nemo-infra pods remain (except PVCs which are retained)
+
+# Step 3: Clean up any orphaned resources (if needed)
+oc delete job,serviceaccount,role,rolebinding -n <namespace> -l component=volcano --ignore-not-found=true
+
+# Step 4: Reinstall fresh
+cd deploy/nemo-infra
+helm dependency update
+helm install nemo-infra . -n <namespace> --create-namespace --wait --timeout 30m
 ```
 
 ## Configuration
@@ -184,24 +231,125 @@ oc describe pvc <pvc-name> -n <namespace>
 oc get pods -n <namespace> | grep volcano
 oc get deployments -n <namespace> | grep volcano
 oc get validatingwebhookconfigurations | grep volcano
+oc get svc -n <namespace> | grep admission
 ```
 
 **Common issues:**
 
-1. **Scheduler pod failing:**
-   - Verify `privileged` SCC is granted
-   - Check service account: `nemo-infra-scheduler`
-   - Command: `oc adm policy add-scc-to-user privileged system:serviceaccount:<namespace>:nemo-infra-scheduler`
+1. **Admission-init job failing with SCC errors:**
+   - **Symptom**: `nemo-infra-admission-init-*` job fails with "unable to validate against any security context constraint"
+   - **Cause**: OpenShift SCC restrictions on security contexts (runAsUser, seLinuxOptions, capabilities)
+   - **Fix**: The chart includes an override template (`admission-init-override.yaml`) that provides OpenShift-compatible security contexts. If issues persist:
+     ```bash
+     # Grant privileged SCC to admission service account
+     oc adm policy add-scc-to-user privileged system:serviceaccount:<namespace>:nemo-infra-admission
+     
+     # Delete the failing job to trigger recreation
+     oc delete job nemo-infra-admission-init-* -n <namespace>
+     ```
 
-2. **Admission pod failing:**
-   - Check ClusterRole permissions
-   - Verify service exists: `nemo-infra-admission-service`
-   - Check webhook configuration
+2. **Scheduler pod failing with "no endpoints available for service":**
+   - **Symptom**: `nemo-infra-scheduler` pod in `Error` state with logs showing "no endpoints available for service nemo-infra-admission-service"
+   - **Cause**: Admission service not ready or SCC not granted
+   - **Fix**:
+     ```bash
+     # Grant privileged SCC to admission service account
+     oc adm policy add-scc-to-user privileged system:serviceaccount:<namespace>:nemo-infra-admission
+     
+     # Delete the failing admission replicaset to trigger recreation
+     oc delete replicaset -n <namespace> -l app.kubernetes.io/name=volcano,app.kubernetes.io/component=admission
+     
+     # Wait for admission pod to be ready
+     oc wait --for=condition=ready pod -l app.kubernetes.io/name=volcano,app.kubernetes.io/component=admission -n <namespace> --timeout=300s
+     
+     # Delete scheduler pod to trigger recreation
+     oc delete pod -n <namespace> -l app.kubernetes.io/name=volcano,app.kubernetes.io/component=scheduler
+     ```
 
-3. **Webhook errors:**
+3. **Controller pod failing with SCC errors:**
+   - **Symptom**: `nemo-infra-controllers` deployment has 0 available replicas, pods fail to create with "unable to validate against any security context constraint"
+   - **Cause**: OpenShift SCC restrictions on security contexts (runAsUser, seLinuxOptions, capabilities)
+   - **Fix**: The chart includes a post-install hook (`controller-patch.yaml`) that patches the deployment with OpenShift-compatible security contexts. If issues persist:
+     ```bash
+     # Grant privileged SCC to controller service account
+     oc adm policy add-scc-to-user privileged system:serviceaccount:<namespace>:nemo-infra-controllers
+     
+     # Manually patch the deployment if needed
+     oc patch deployment nemo-infra-controllers -n <namespace> --type='json' -p='[
+       {"op": "remove", "path": "/spec/template/spec/securityContext"},
+       {"op": "replace", "path": "/spec/template/spec/containers/0/securityContext", "value": {
+         "runAsUser": 1000900000,
+         "runAsNonRoot": true,
+         "allowPrivilegeEscalation": false,
+         "capabilities": {"drop": ["ALL"]},
+         "seccompProfile": {"type": "RuntimeDefault"}
+       }}
+     ]'
+     ```
+
+4. **Volcano Jobs not creating worker pods:**
+   - **Symptom**: Volcano Jobs exist but no worker pods are created, PodGroups show 0 RUNNINGS
+   - **Cause**: Missing default queue, controller not running, or PodGroup status not set
+   - **Fix**:
+     ```bash
+     # Check if default queue exists
+     oc get queue default -n <namespace>
+     
+     # If missing, create it:
+     cat <<EOF | oc apply -f -
+     apiVersion: scheduling.volcano.sh/v1beta1
+     kind: Queue
+     metadata:
+       name: default
+       namespace: <namespace>
+     spec:
+       weight: 1
+       capability:
+         cpu: "1000"
+         memory: "1000Gi"
+       reclaimable: true
+       state: Open
+     EOF
+     
+     # Verify controller is running
+     oc get pods -n <namespace> | grep controllers
+     
+     # Check PodGroups and set status if needed
+     oc get podgroup -n <namespace>
+     
+     # If PodGroup status is empty, set it to Inqueue (required for pod creation):
+     PODGROUP_NAME=$(oc get podgroup -n <namespace> | grep <job-name> | awk '{print $1}' | head -1)
+     if [ -n "$PODGROUP_NAME" ]; then
+       oc patch podgroup $PODGROUP_NAME -n <namespace> --type='json' \
+         -p='[{"op": "add", "path": "/status/phase", "value": "Inqueue"}]'
+     fi
+     
+     # Note: The PodGroup status patch hook (podgroup-status-patch.yaml) should handle this automatically
+     # but you can manually patch if needed
+     ```
+
+5. **Volcano worker pods stuck in Pending:**
+   - **Symptom**: Worker pods are created but remain in Pending state, not being scheduled
+   - **Cause**: Missing PodGroup annotation on pods (`scheduling.volcano.sh/podgroup`)
+   - **Fix**:
+     ```bash
+     # Check if pod has PodGroup annotation
+     oc get pod <pod-name> -n <namespace> -o jsonpath='{.metadata.annotations.scheduling\.volcano\.sh/podgroup}'
+     
+     # If missing, find the PodGroup and add annotation:
+     PODGROUP_NAME=$(oc get podgroup -n <namespace> -l nvidia.com/created-by=<job-uid> -o jsonpath='{.items[0].metadata.name}')
+     oc patch pod <pod-name> -n <namespace> --type='json' \
+       -p="[{\"op\": \"add\", \"path\": \"/metadata/annotations/scheduling.volcano.sh~1podgroup\", \"value\": \"$PODGROUP_NAME\"}]"
+     
+     # Verify the PodGroup annotation controller is running
+     oc get pods -n <namespace> | grep podgroup-annotation-controller
+     ```
+
+6. **Webhook errors:**
    - Verify webhooks are scoped to correct namespace
-   - Check service endpoints
+   - Check service endpoints: `oc get endpoints nemo-infra-admission-service -n <namespace>`
    - Verify certificates
+   - Webhook failure policies are set to `Ignore` to prevent timeout issues
 
 </details>
 
@@ -212,11 +360,29 @@ oc get validatingwebhookconfigurations | grep volcano
 ```bash
 oc get pods -n <namespace> | grep argo
 oc get crd | grep workflow
+oc get serviceaccount -n <namespace> | grep argo
 ```
 
 **Common issues:**
-- CRDs not installed: Ensure `evaluator-argo.crds.install: true`
-- Controller not starting: Check service account permissions
+
+1. **Service account conflict during upgrade:**
+   - **Symptom**: Helm upgrade fails with "openshift.io/image-registry-pull-secrets_service-account-controller" conflict
+   - **Fix**:
+     ```bash
+     # Delete the conflicting service account
+     oc delete sa argo-workflows-executor -n <namespace>
+     
+     # Retry the upgrade
+     helm upgrade nemo-infra . -n <namespace>
+     ```
+
+2. **CRDs not installed:**
+   - Ensure `evaluator-argo.crds.install: true` in values.yaml
+   - CRDs are retained during uninstall (by design) - this is normal
+
+3. **Controller not starting:**
+   - Check service account permissions
+   - Verify RBAC resources exist
 
 </details>
 
@@ -227,12 +393,52 @@ oc get crd | grep workflow
 ```bash
 oc get pods -n <namespace> | grep postgresql
 oc logs <postgresql-pod> -n <namespace>
+oc get svc -n <namespace> | grep postgresql
 ```
 
 **Common fixes:**
 - Verify service names match in connection strings
 - Check authentication credentials
 - Ensure pods are ready before connecting
+- Verify PVCs are bound: `oc get pvc -n <namespace> | grep postgresql`
+
+</details>
+
+<details>
+<summary><strong>Milvus Issues</strong></summary>
+
+**Check Milvus components:**
+```bash
+oc get pods -n <namespace> | grep milvus
+oc get svc -n <namespace> | grep milvus
+oc get pvc -n <namespace> | grep milvus
+```
+
+**Common issues:**
+
+1. **Milvus crashing (CrashLoopBackOff):**
+   - **Cause**: Milvus v5.0.12+ attempts to deploy Pulsar v3, which has SCC issues
+   - **Fix**: Chart uses Milvus v4.1.11 with embedded `woodpecker` message queue
+   - If upgrading from v5.0.12, ensure Pulsar components are cleaned up:
+     ```bash
+     # Delete stuck Pulsar resources
+     oc delete statefulset,job,pod,svc -n <namespace> -l app.kubernetes.io/name=pulsar
+     oc delete svc -n <namespace> | grep pulsarv3 | awk '{print $1}' | xargs oc delete svc -n <namespace>
+     ```
+
+2. **Pulsar components stuck in Init phase:**
+   - **Symptom**: Pulsar pods (bookie, broker, proxy, zookeeper) stuck in `Init:0/1` or `Init:0/2`
+   - **Cause**: Pulsar v3 has SCC compatibility issues on OpenShift
+   - **Fix**: 
+     - Ensure Milvus is using v4.1.11 (not v5.0.12)
+     - Verify `evaluator-milvus.pulsar.enabled: false` and `evaluator-milvus.pulsarv3.enabled: false` in values.yaml
+     - Verify `evaluator-milvus.extraConfigFiles.user.yaml` has `messageQueue: woodpecker`
+     - Clean up any remaining Pulsar resources (see above)
+
+3. **Milvus not starting:**
+   - Check PVC is bound: `oc get pvc nemo-infra-evaluator-milvus -n <namespace>`
+   - Verify `anyuid` SCC is granted: `oc get scc anyuid -o yaml | grep -A 5 nemo-infra-evaluator-milvus`
+   - Check logs: `oc logs -n <namespace> -l app.kubernetes.io/name=milvus --tail=100`
 
 </details>
 
@@ -345,22 +551,48 @@ nemo-infra/
 │   ├── namespace.yaml      # Namespace resource
 │   ├── evaluator/          # Evaluator component templates
 │   └── volcano/            # Volcano-specific templates
-│       ├── oc-rbac.yaml    # OpenShift RBAC configuration
-│       ├── webhook-patch.yaml  # Webhook namespace scoping
-│       └── clusterrole-patch.yaml  # ClusterRole patches
+│       ├── oc-rbac.yaml    # OpenShift RBAC configuration (SCC grants)
+│       ├── admission-init-override.yaml  # OpenShift-compatible admission init job
+│       ├── webhook-patch.yaml  # Webhook namespace scoping and failure policy
+│       ├── clusterrole-patch.yaml  # ClusterRole patches
+│       ├── controller-patch.yaml  # Controller deployment security context patch
+│       └── default-queue.yaml  # Default queue creation
 └── README.md              # This file
 ```
 
+### OpenShift-Specific Templates
+
+The chart includes several OpenShift-specific templates to handle security context constraints and compatibility:
+
+1. **`volcano/admission-init-override.yaml`**: Overrides the default Volcano admission-init job with OpenShift-compatible security contexts:
+   - Removes problematic `seLinuxOptions` and `capabilities.add` entries
+   - Sets `runAsUser: 1000`, `runAsNonRoot: true`
+   - Drops all capabilities and uses `RuntimeDefault` seccomp profile
+   - This template is automatically used instead of the upstream chart's default
+
+2. **`volcano/oc-rbac.yaml`**: Grants `privileged` SCC to Volcano scheduler and admission service accounts via RBAC
+
+3. **`volcano/webhook-patch.yaml`**: Scopes Volcano webhooks to specific namespaces for multi-tenant safety
+
+4. **`volcano/clusterrole-patch.yaml`**: Patches Volcano ClusterRoles for OpenShift compatibility
+
 ## Dependencies
 
-This chart depends on the following Helm charts:
+This chart depends on the following Helm charts (latest stable versions as of deployment):
 
-- **PostgreSQL** (Bitnami): 16.0.0
-- **MLflow** (Bitnami): 1.0.6
-- **OpenTelemetry Collector**: 0.93.3
-- **Argo Workflows**: 0.40.11
-- **Milvus**: 4.1.11
-- **Volcano**: 1.9.0
+- **PostgreSQL** (Bitnami): **18.2.3** (upgraded from 16.0.0)
+- **MLflow** (Bitnami): **5.1.17** (upgraded from 1.0.6)
+- **OpenTelemetry Collector**: **0.143.0** (upgraded from 0.93.3)
+- **Argo Workflows**: **0.47.0** (upgraded from 0.40.11)
+- **Milvus**: **4.1.11** (downgraded from 5.0.12 for OpenShift compatibility)
+- **Volcano**: **1.13.1** (upgraded from 1.9.0)
+
+### Version Notes
+
+- **Milvus 4.1.11**: Using v4.1.11 instead of v5.0.12 because:
+  - v5.0.12 attempts to deploy Pulsar v3 as a dependency, which has Security Context Constraint (SCC) issues on OpenShift
+  - v4.1.11 uses embedded `woodpecker` message queue, avoiding Pulsar dependencies
+  - Pulsar components were getting stuck in `Init` phase due to SCC restrictions
 
 ## Notes about images used in the deployment
 
@@ -417,6 +649,85 @@ For issues and questions:
 
 ---
 
-**Last Updated**: November 2025
+## OpenShift-Specific Fixes and Configuration
+
+This chart includes several OpenShift-specific fixes to ensure seamless deployment:
+
+### 1. Volcano Admission-Init Override
+
+The upstream Volcano chart's `admission-init` job has security contexts incompatible with OpenShift's SCC. The chart includes `templates/volcano/admission-init-override.yaml` that:
+- Removes `seLinuxOptions` (causes SCC validation failures)
+- Removes `capabilities.add` (not allowed by default SCC)
+- Sets OpenShift-compatible security contexts (`runAsUser: 1000`, `runAsNonRoot: true`, `drop: ALL` capabilities)
+- Uses `RuntimeDefault` seccomp profile
+
+### 2. Milvus Pulsar Disablement
+
+Milvus v5.0.12+ attempts to deploy Pulsar v3 as a dependency, which has SCC issues on OpenShift. The chart:
+- Uses Milvus v4.1.11 (stable, OpenShift-compatible)
+- Explicitly disables Pulsar: `evaluator-mlflow.pulsar.enabled: false` and `evaluator-mlflow.pulsarv3.enabled: false`
+- Configures embedded `woodpecker` message queue: `messageQueue: woodpecker` in `extraConfigFiles.user.yaml`
+
+### 3. SCC Grants
+
+The chart automatically grants required SCCs via RBAC:
+- **`privileged`**: Granted to Volcano scheduler, admission, and controller service accounts
+- **`anyuid`**: Granted to Milvus service account
+
+### 4. Duplicate Environment Variable Fix
+
+Removed duplicate `MINIO_DEFAULT_BUCKETS` from `customizer-mlflow.minio.extraEnvVars` to prevent Helm validation errors.
+
+### 5. Volcano Controller Security Context Patch
+
+The Volcano chart's controller deployment uses security contexts incompatible with OpenShift. The chart includes `templates/volcano/controller-patch.yaml` that:
+- Removes pod-level `securityContext` with `seLinuxOptions` (causes SCC validation failures)
+- Patches container security context to use OpenShift-compatible values:
+  - `runAsUser: 1000900000` (OpenShift UID range)
+  - `runAsNonRoot: true`
+  - `allowPrivilegeEscalation: false`
+  - `capabilities.drop: ["ALL"]`
+  - `seccompProfile.type: RuntimeDefault`
+- Applied via post-install/post-upgrade hook
+
+### 6. Default Queue Creation
+
+Volcano Jobs require a queue to be created before they can be scheduled. The scheduler attempts to create a default queue in-memory, but it needs to be persisted. The chart includes `templates/volcano/default-queue.yaml` that:
+- Creates the `default` queue in the deployment namespace
+- Configures queue with appropriate resource limits
+- Sets queue state to `Open` to allow job scheduling
+
+### 7. Webhook Failure Policy
+
+Volcano webhooks may timeout due to network policies or Istio mesh restrictions. The chart includes `templates/volcano/webhook-patch.yaml` that:
+- Sets `failurePolicy: Ignore` for all Volcano webhooks (validating and mutating)
+- Prevents pod/resource creation failures when webhooks timeout
+- Patches both validating webhooks (jobs, pods, queues) and mutating webhooks (jobs, queues)
+
+### 8. PodGroup Status Patch
+
+Volcano Job controller requires PodGroup status to be set to "Inqueue" before creating pods. PodGroups are created with empty status by default. The chart includes `templates/volcano/podgroup-status-patch.yaml` that:
+- Watches for PodGroups with empty status via a post-install/post-upgrade hook
+- Automatically sets `status.phase` to "Inqueue" for all PodGroups in the namespace
+- Ensures worker pods can be created by the Volcano Job controller
+- Runs as a one-time job hook that patches existing PodGroups
+
+### 9. PodGroup Annotation Controller
+
+Volcano Jobs create pods, but the Volcano scheduler requires the `scheduling.volcano.sh/podgroup` annotation on pods to associate them with PodGroups for gang scheduling. The Volcano Job controller doesn't always set this annotation automatically. The chart includes `templates/volcano/podgroup-annotation-controller.yaml` that:
+- Watches for pods with `volcano.sh/job-name` label
+- Finds the associated PodGroup by matching owner references to Volcano Jobs
+- Automatically patches pods to add the `scheduling.volcano.sh/podgroup` annotation
+- Runs as a lightweight controller that processes pods every 5 seconds
+- **Critical Fix**: Without this annotation, worker pods remain in Pending state and cannot be scheduled
+
+### 10. Global Security Settings
+
+Added `global.security.allowInsecureImages: true` to suppress warnings about custom images (PostgreSQL, MinIO, Python, etc.).
+
+---
+
+**Last Updated**: January 2025
 **OpenShift Version**: 4.x
 **Helm Version**: 3.x
+**Tested Versions**: OpenShift 4.14+, Helm 3.12+

@@ -1,0 +1,226 @@
+{{- if .Values.install.volcano }}
+# Controller to automatically add PodGroup annotation to pods created by Volcano Jobs
+# The Volcano scheduler requires the scheduling.volcano.sh/podgroup annotation to associate
+# pods with PodGroups for gang scheduling. This controller watches for pods with Volcano
+# Job labels and patches them with the correct PodGroup annotation.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: volcano-podgroup-annotation-controller
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+    app: volcano-podgroup-annotation-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: volcano-podgroup-annotation-controller
+  template:
+    metadata:
+      labels:
+        app: volcano-podgroup-annotation-controller
+    spec:
+      serviceAccountName: volcano-podgroup-annotation-controller
+      containers:
+      - name: controller
+        image: registry.redhat.io/openshift4/ose-cli:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          # Controller that watches pods and adds PodGroup annotation
+          python3 << 'EOF'
+          import json
+          import subprocess
+          import time
+          import sys
+          
+          NAMESPACE = "{{ .Values.namespace.name }}"
+          
+          def get_podgroups():
+              """Get all PodGroups in namespace"""
+              try:
+                  result = subprocess.run(
+                      ['oc', 'get', 'podgroup', '-n', NAMESPACE, '-o', 'json'],
+                      capture_output=True,
+                      text=True
+                  )
+                  if result.returncode == 0:
+                      data = json.loads(result.stdout)
+                      return {pg['metadata']['name']: pg for pg in data.get('items', [])}
+                  return {}
+              except Exception as e:
+                  print(f"Error getting PodGroups: {e}", file=sys.stderr)
+                  return {}
+          
+          def get_pods_without_annotation():
+              """Get pods with Volcano Job labels but without PodGroup annotation"""
+              try:
+                  result = subprocess.run(
+                      ['oc', 'get', 'pods', '-n', NAMESPACE, '-l', 'volcano.sh/job-name', '-o', 'json'],
+                      capture_output=True,
+                      text=True
+                  )
+                  if result.returncode == 0:
+                      data = json.loads(result.stdout)
+                      pods = []
+                      for pod in data.get('items', []):
+                          annotations = pod.get('metadata', {}).get('annotations', {})
+                          if 'scheduling.volcano.sh/podgroup' not in annotations:
+                              pods.append(pod)
+                      return pods
+                  return []
+              except Exception as e:
+                  print(f"Error getting pods: {e}", file=sys.stderr)
+                  return []
+          
+          def find_podgroup_for_pod(pod, podgroups):
+              """Find the PodGroup for a given pod"""
+              labels = pod.get('metadata', {}).get('labels', {})
+              job_name = labels.get('volcano.sh/job-name')
+              
+              if not job_name:
+                  return None
+              
+              # Look for PodGroup with matching owner reference
+              pod_uid = pod.get('metadata', {}).get('uid')
+              
+              # Try to find PodGroup by owner reference or by name pattern
+              for pg_name, pg in podgroups.items():
+                  # Check if PodGroup has owner reference to a Volcano Job with matching name
+                  owner_refs = pg.get('metadata', {}).get('ownerReferences', [])
+                  for owner_ref in owner_refs:
+                      if owner_ref.get('kind') == 'Job' and owner_ref.get('apiVersion', '').startswith('batch.volcano.sh'):
+                          # Get the Volcano Job to check its name
+                          try:
+                              vj_result = subprocess.run(
+                                  ['oc', 'get', 'vj', owner_ref['name'], '-n', NAMESPACE, '-o', 'json'],
+                                  capture_output=True,
+                                  text=True
+                              )
+                              if vj_result.returncode == 0:
+                                  vj = json.loads(vj_result.stdout)
+                                  vj_name = vj.get('metadata', {}).get('name', '')
+                                  if vj_name == job_name:
+                                      return pg_name
+                          except:
+                              pass
+              
+              # Fallback: try to find PodGroup by name pattern
+              # PodGroup names often follow pattern: {job-name}-{uid}
+              for pg_name in podgroups.keys():
+                  if job_name in pg_name:
+                      return pg_name
+              
+              return None
+          
+          def patch_pod_with_annotation(pod_name, podgroup_name):
+              """Patch pod to add PodGroup annotation"""
+              try:
+                  result = subprocess.run(
+                      ['oc', 'patch', 'pod', pod_name, '-n', NAMESPACE,
+                       '--type=json',
+                       '-p', json.dumps([{
+                           'op': 'add',
+                           'path': '/metadata/annotations/scheduling.volcano.sh~1podgroup',
+                           'value': podgroup_name
+                       }])],
+                      capture_output=True,
+                      text=True
+                  )
+                  if result.returncode == 0:
+                      print(f"✅ Patched pod {pod_name} with PodGroup annotation: {podgroup_name}")
+                      return True
+                  else:
+                      print(f"⚠️  Failed to patch pod {pod_name}: {result.stderr}", file=sys.stderr)
+                      return False
+              except Exception as e:
+                  print(f"❌ Error patching pod {pod_name}: {e}", file=sys.stderr)
+                  return False
+          
+          print(f"🚀 Starting PodGroup annotation controller for namespace {NAMESPACE}", file=sys.stderr)
+          
+          while True:
+              try:
+                  # Get current state
+                  podgroups = get_podgroups()
+                  pods = get_pods_without_annotation()
+                  
+                  if pods:
+                      print(f"📋 Found {len(pods)} pods without PodGroup annotation", file=sys.stderr)
+                  
+                  # Process each pod
+                  for pod in pods:
+                      pod_name = pod.get('metadata', {}).get('name')
+                      podgroup_name = find_podgroup_for_pod(pod, podgroups)
+                      
+                      if podgroup_name:
+                          patch_pod_with_annotation(pod_name, podgroup_name)
+                      else:
+                          print(f"⚠️  Could not find PodGroup for pod {pod_name}", file=sys.stderr)
+                  
+                  # Sleep before next iteration
+                  time.sleep(5)
+                  
+              except KeyboardInterrupt:
+                  print("🛑 Controller stopping...", file=sys.stderr)
+                  break
+              except Exception as e:
+                  print(f"❌ Error in controller loop: {e}", file=sys.stderr)
+                  time.sleep(5)
+          EOF
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: volcano-podgroup-annotation-controller
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: volcano-podgroup-annotation-controller
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "patch"]
+- apiGroups: ["scheduling.volcano.sh"]
+  resources: ["podgroups"]
+  verbs: ["get", "list"]
+- apiGroups: ["batch.volcano.sh"]
+  resources: ["jobs"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: volcano-podgroup-annotation-controller
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+subjects:
+- kind: ServiceAccount
+  name: volcano-podgroup-annotation-controller
+  namespace: {{ .Values.namespace.name }}
+roleRef:
+  kind: Role
+  name: volcano-podgroup-annotation-controller
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

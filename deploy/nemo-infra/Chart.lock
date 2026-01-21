@@ -1,36 +1,36 @@
 dependencies:
 - name: postgresql
   repository: oci://registry-1.docker.io/bitnamicharts
-  version: 16.0.0
+  version: 18.2.3
 - name: postgresql
   repository: oci://registry-1.docker.io/bitnamicharts
-  version: 16.0.0
+  version: 18.2.3
 - name: postgresql
   repository: oci://registry-1.docker.io/bitnamicharts
-  version: 16.0.0
+  version: 18.2.3
 - name: postgresql
   repository: oci://registry-1.docker.io/bitnamicharts
-  version: 16.0.0
+  version: 18.2.3
 - name: postgresql
   repository: oci://registry-1.docker.io/bitnamicharts
-  version: 16.0.0
+  version: 18.2.3
 - name: mlflow
   repository: oci://registry-1.docker.io/bitnamicharts
-  version: 1.0.6
+  version: 5.1.17
 - name: opentelemetry-collector
   repository: https://open-telemetry.github.io/opentelemetry-helm-charts
-  version: 0.93.3
+  version: 0.143.0
 - name: opentelemetry-collector
   repository: https://open-telemetry.github.io/opentelemetry-helm-charts
-  version: 0.93.3
+  version: 0.143.0
 - name: argo-workflows
   repository: https://argoproj.github.io/argo-helm
-  version: 0.40.11
+  version: 0.47.0
 - name: milvus
   repository: https://zilliztech.github.io/milvus-helm/
   version: 4.1.11
 - name: volcano
   repository: https://volcano-sh.github.io/helm-charts
-  version: 1.9.0
-digest: sha256:caa5dc555e4599deb74fc35e2c639016ccb75d7c71dea5f963f7de072d86194a
-generated: "2025-11-10T11:05:14.574405-05:00"
+  version: 1.13.1
+digest: sha256:8b88a79fa228aa34f601ea8ab8d9d2224acf2a424d23d8694e9cb46482d85bc7
+generated: "2026-01-21T11:31:38.902332-05:00"

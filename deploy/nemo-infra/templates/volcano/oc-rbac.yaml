@@ -72,5 +72,70 @@ roleRef:
   kind: Role
   name: volcano-scc-privileged
   apiGroup: rbac.authorization.k8s.io
+---
+# Grant privileged SCC to Volcano admission service account
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: volcano-admission-scc-privileged
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+rules:
+- apiGroups: ['security.openshift.io']
+  resources: ['securitycontextconstraints']
+  verbs: ['use']
+  resourceNames: ['privileged']
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: volcano-admission-scc-privileged-binding
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+subjects:
+- kind: ServiceAccount
+  name: {{ .Release.Name }}-admission
+  namespace: {{ .Values.namespace.name }}
+roleRef:
+  kind: Role
+  name: volcano-admission-scc-privileged
+  apiGroup: rbac.authorization.k8s.io
+---
+# Grant privileged SCC to Volcano controller service account
+# Required for controller pod to start on OpenShift
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: volcano-controller-scc-privileged
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+rules:
+- apiGroups: ['security.openshift.io']
+  resources: ['securitycontextconstraints']
+  verbs: ['use']
+  resourceNames: ['privileged']
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: volcano-controller-scc-privileged-binding
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+subjects:
+- kind: ServiceAccount
+  name: {{ .Release.Name }}-controllers
+  namespace: {{ .Values.namespace.name }}
+roleRef:
+  kind: Role
+  name: volcano-controller-scc-privileged
+  apiGroup: rbac.authorization.k8s.io
 {{- end }}
 

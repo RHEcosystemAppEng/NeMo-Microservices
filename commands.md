@@ -50,15 +50,32 @@ oc get servicemeshmember -n $NAMESPACE
 ## Infrastructure Installation
 
 ### 1. Install nemo-infra
+
+**Prerequisites:**
+- OpenShift 4.x cluster
+- Helm 3.x installed
+- `oc` CLI configured and authenticated
+- Sufficient cluster resources (CPU, memory, storage)
+- Access to container registries (Docker Hub, NGC, Quay.io)
+
 ```bash
 cd NeMo-Microservices/deploy/nemo-infra
 
-# Update Helm dependencies
+# Update Helm dependencies (downloads all subcharts)
 helm dependency update
 
 # Install infrastructure (namespace should already exist)
-helm install nemo-infra . -n $NAMESPACE
+helm install nemo-infra . -n $NAMESPACE --create-namespace --wait --timeout 30m
 ```
+
+**Expected Components:**
+- PostgreSQL (5 instances: datastore, entity-store, customizer, guardrail, evaluator)
+- MLflow tracking server
+- OpenTelemetry Collector (2 instances: customizer, evaluator)
+- Argo Workflows (server + controller)
+- Milvus standalone (vector database)
+- Volcano Scheduler + Admission (required for NeMo Operator)
+- MinIO (object storage for MLflow artifacts)
 
 ### 2. Wait for Infrastructure (Optional - can proceed while starting)
 ```bash
@@ -71,12 +88,167 @@ oc wait --for=condition=ready pod -l app.kubernetes.io/instance=nemo-infra -n $N
 
 ### 3. Verify Infrastructure is Ready
 ```bash
-# Check all infrastructure pods
+# Check all infrastructure pods (should show 15 pods, all Running)
 oc get pods -n $NAMESPACE | grep nemo-infra
 
-# Verify operators are running
+# Expected output:
+# - nemo-infra-*-postgresql-0 (5 pods)
+# - nemo-infra-customizer-mlflow-tracking-*
+# - nemo-infra-customizer-opentelemetry-*
+# - nemo-infra-evaluator-opentelemetry-*
+# - nemo-infra-argo-workflows-server-*
+# - nemo-infra-argo-workflows-workflow-controller-*
+# - nemo-infra-evaluator-milvus-standalone-*
+# - nemo-infra-scheduler-*
+# - nemo-infra-admission-*
+# - nemo-infra-minio-*
+
+# Verify all pods are Running
+oc get pods -n $NAMESPACE | grep nemo-infra | grep -v Running
+# Should return no results if all are running
+
+# Verify operators are running (if nemo-instances is installed)
 oc get pods -n $NAMESPACE | grep -E "operator|controller"
 ```
+
+### 4. Clean Uninstall and Reinstall (For Fresh Deployment)
+
+To ensure a clean deployment from scratch:
+
+```bash
+# Step 1: Uninstall existing deployment
+helm uninstall nemo-infra -n $NAMESPACE
+
+# Step 2: Wait for resources to be cleaned up
+oc get pods -n $NAMESPACE | grep nemo-infra
+# Wait until no nemo-infra pods remain (except PVCs which are retained)
+
+# Step 3: Clean up any orphaned resources (if needed)
+oc delete job,serviceaccount,role,rolebinding -n $NAMESPACE -l component=volcano --ignore-not-found=true
+
+# Step 4: Clean up any stuck Pulsar resources (if upgrading from Milvus v5.0.12)
+oc delete statefulset,job,pod,svc -n $NAMESPACE -l app.kubernetes.io/name=pulsar --ignore-not-found=true
+oc get svc -n $NAMESPACE | grep pulsarv3 | awk '{print $1}' | xargs -r oc delete svc -n $NAMESPACE --ignore-not-found=true
+
+# Step 5: Reinstall fresh
+cd NeMo-Microservices/deploy/nemo-infra
+helm dependency update
+helm install nemo-infra . -n $NAMESPACE --create-namespace --wait --timeout 30m
+```
+
+### 5. Troubleshooting Infrastructure Issues
+
+**If Volcano admission-init job fails:**
+```bash
+# Grant privileged SCC to admission service account
+oc adm policy add-scc-to-user privileged system:serviceaccount:$NAMESPACE:nemo-infra-admission
+
+# Delete the failing job to trigger recreation
+oc delete job nemo-infra-admission-init-* -n $NAMESPACE
+```
+
+**If Volcano scheduler fails with "no endpoints available":**
+```bash
+# Grant privileged SCC to admission service account
+oc adm policy add-scc-to-user privileged system:serviceaccount:$NAMESPACE:nemo-infra-admission
+
+# Delete the failing admission replicaset to trigger recreation
+oc delete replicaset -n $NAMESPACE -l app.kubernetes.io/name=volcano,app.kubernetes.io/component=admission
+
+# Wait for admission pod to be ready
+oc wait --for=condition=ready pod -l app.kubernetes.io/name=volcano,app.kubernetes.io/component=admission -n $NAMESPACE --timeout=300s
+
+# Delete scheduler pod to trigger recreation
+oc delete pod -n $NAMESPACE -l app.kubernetes.io/name=volcano,app.kubernetes.io/component=scheduler
+```
+
+**If Volcano Jobs not creating worker pods:**
+```bash
+# Check if default queue exists
+oc get queue default -n $NAMESPACE
+
+# If missing, create it:
+cat <<EOF | oc apply -f -
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: Queue
+metadata:
+  name: default
+  namespace: $NAMESPACE
+spec:
+  weight: 1
+  capability:
+    cpu: "1000"
+    memory: "1000Gi"
+  reclaimable: true
+  state: Open
+EOF
+
+# Verify controller is running
+oc get pods -n $NAMESPACE | grep controllers
+
+# Check PodGroups and set status if needed
+oc get podgroup -n $NAMESPACE
+
+# If PodGroup status is empty, set it to Inqueue (required for pod creation):
+PODGROUP_NAME=$(oc get podgroup -n $NAMESPACE | grep <job-name> | awk '{print $1}' | head -1)
+if [ -n "$PODGROUP_NAME" ]; then
+  oc patch podgroup $PODGROUP_NAME -n $NAMESPACE --type='json' \
+    -p='[{"op": "add", "path": "/status/phase", "value": "Inqueue"}]'
+fi
+```
+
+**If Volcano worker pods stuck in Pending (not being scheduled):**
+```bash
+# Check if pod has PodGroup annotation (required for scheduling)
+WORKER_POD=$(oc get pods -n $NAMESPACE -l volcano.sh/job-name -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+if [ -n "$WORKER_POD" ]; then
+  oc get pod $WORKER_POD -n $NAMESPACE -o jsonpath='{.metadata.annotations.scheduling\.volcano\.sh/podgroup}'
+  echo ""
+fi
+
+# If annotation is missing, find PodGroup and add it:
+PODGROUP_NAME=$(oc get podgroup -n $NAMESPACE | grep <job-name> | awk '{print $1}' | head -1)
+if [ -n "$WORKER_POD" ] && [ -n "$PODGROUP_NAME" ]; then
+  oc patch pod $WORKER_POD -n $NAMESPACE --type='json' \
+    -p="[{\"op\": \"add\", \"path\": \"/metadata/annotations/scheduling.volcano.sh~1podgroup\", \"value\": \"$PODGROUP_NAME\"}]"
+  
+  # Also ensure PodGroup status is set
+  oc patch podgroup $PODGROUP_NAME -n $NAMESPACE --type='json' \
+    -p='[{"op": "add", "path": "/status/phase", "value": "Inqueue"}]'
+fi
+
+# Verify the PodGroup annotation controller is running (auto-patches new pods)
+oc get pods -n $NAMESPACE | grep podgroup-annotation-controller
+
+# Check controller logs
+oc logs -n $NAMESPACE -l app=volcano-podgroup-annotation-controller --tail=50
+```
+
+**If Milvus is crashing or Pulsar components are stuck:**
+```bash
+# Verify Milvus is using v4.1.11 (not v5.0.12)
+helm get values nemo-infra -n $NAMESPACE | grep -A 5 milvus
+
+# Clean up stuck Pulsar resources
+oc delete statefulset,job,pod,svc -n $NAMESPACE -l app.kubernetes.io/name=pulsar --ignore-not-found=true
+oc get svc -n $NAMESPACE | grep pulsarv3 | awk '{print $1}' | xargs -r oc delete svc -n $NAMESPACE --ignore-not-found=true
+
+# Verify Milvus configuration
+oc get configmap -n $NAMESPACE | grep milvus
+oc logs -n $NAMESPACE -l app.kubernetes.io/name=milvus --tail=100
+```
+
+**If Argo Workflows service account conflict:**
+```bash
+# Delete the conflicting service account
+oc delete sa argo-workflows-executor -n $NAMESPACE
+
+# Retry the upgrade
+cd NeMo-Microservices/deploy/nemo-infra
+helm upgrade nemo-infra . -n $NAMESPACE
+```
+
+For more detailed troubleshooting, see [deploy/nemo-infra/README.md](deploy/nemo-infra/README.md#troubleshooting).
 
 ## Instances Installation
 

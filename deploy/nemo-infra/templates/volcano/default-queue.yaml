@@ -1,0 +1,24 @@
+{{- if .Values.install.volcano }}
+# Create default queue for Volcano Jobs
+# Volcano Jobs require a queue to be created before they can be scheduled
+# The scheduler tries to create this in-memory but it needs to be persisted
+# This is a post-install hook to ensure Volcano CRDs are installed first
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: Queue
+metadata:
+  name: default
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "20"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  weight: 1
+  capability:
+    cpu: "1000"
+    memory: "1000Gi"
+  reclaimable: true
+{{- end }}

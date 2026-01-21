@@ -15,59 +15,61 @@ maintainers:
 dependencies:
   # Datastore PostgreSQL
   - name: postgresql
-    version: "16.0.0"
+    version: "18.2.3"
     repository: oci://registry-1.docker.io/bitnamicharts
     condition: install.datastore
     alias: datastore-postgresql
   # Entity Store PostgreSQL
   - name: postgresql
-    version: "16.0.0"
+    version: "18.2.3"
     repository: oci://registry-1.docker.io/bitnamicharts
     condition: install.entityStore
     alias: entity-store-postgresql
   # Customizer PostgreSQL
   - name: postgresql
-    version: "16.0.0"
+    version: "18.2.3"
     repository: oci://registry-1.docker.io/bitnamicharts
     condition: install.customizer
     alias: customizer-postgresql
   # Guardrail PostgreSQL
   - name: postgresql
-    version: "16.0.0"
+    version: "18.2.3"
     repository: oci://registry-1.docker.io/bitnamicharts
     condition: install.guardrail
     alias: guardrail-postgresql
   # Evaluator PostgreSQL
   - name: postgresql
-    version: "16.0.0"
+    version: "18.2.3"
     repository: oci://registry-1.docker.io/bitnamicharts
     condition: install.evaluator
     alias: evaluator-postgresql
   # Customizer MLflow
   - name: mlflow
-    version: "1.0.6"
+    version: "5.1.17"
     repository: oci://registry-1.docker.io/bitnamicharts
     condition: install.customizer
     alias: customizer-mlflow
   # Customizer OpenTelemetry
   - name: opentelemetry-collector
-    version: "0.93.3"
+    version: "0.143.0"
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
     condition: install.customizer
     alias: customizer-opentelemetry
   # Evaluator OpenTelemetry
   - name: opentelemetry-collector
-    version: "0.93.3"
+    version: "0.143.0"
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
     condition: install.evaluator
     alias: evaluator-opentelemetry
   # Evaluator Argo Workflows
   - name: argo-workflows
-    version: "0.40.11"
+    version: "0.47.0"
     repository: https://argoproj.github.io/argo-helm
     condition: install.evaluator
     alias: evaluator-argo
   # Evaluator Milvus
+  # Using v4.1.11 instead of v5.0.12 for OpenShift compatibility
+  # v5.0.12 has Pulsar v3 dependency with SCC issues
   - name: milvus
     version: "4.1.11"
     repository: https://zilliztech.github.io/milvus-helm/
@@ -75,7 +77,7 @@ dependencies:
     alias: evaluator-milvus
   # Volcano Scheduler
   - name: volcano
-    version: "1.9.0"
+    version: "1.13.1"
     repository: https://volcano-sh.github.io/helm-charts
     condition: install.volcano
     alias: volcano

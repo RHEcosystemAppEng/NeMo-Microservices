@@ -76,10 +76,10 @@ customizer:
   modelPVC:
     create: true
     name: finetuning-ms-models-pvc
-    size: 50Gi
+    size: 100Gi  # Increased from 50Gi to cache large base models (e.g., llama-3.2-1b-instruct ~62GB)
   workspacePVC:
     storageClass: "gp3-csi"  # Changed from "local-path" to match cluster storage class
-    size: 10Gi
+    size: 50Gi  # Increased from 10Gi for training job model storage
     mountPath: /pvc/workspace
   modelConfig:
     name: nemo-model-config
@@ -173,13 +173,13 @@ entitystore:
     passwordKey: password
 
 # ===== NemoEvaluator Configuration =====
-# Image: nvcr.io/nvidia/nemo-microservices/evaluator:25.06 (exact from quickstart)
+# Image: nvcr.io/nvidia/nemo-microservices/evaluator:25.08 (upgraded from 25.06)
 evaluator:
   enabled: true
   name: nemoevaluator-sample
   image:
     repository: nvcr.io/nvidia/nemo-microservices/evaluator
-    tag: "25.06"
+    tag: "25.08"
     pullPolicy: IfNotPresent
   evaluationImages:
     bigcodeEvalHarness: "nvcr.io/nvidia/nemo-microservices/eval-tool-benchmark-bigcode:0.12.21"

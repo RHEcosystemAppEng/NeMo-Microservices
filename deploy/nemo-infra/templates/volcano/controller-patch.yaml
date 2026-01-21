@@ -1,0 +1,100 @@
+{{- if .Values.install.volcano }}
+# Post-install hook to patch Volcano controller deployment with OpenShift-compatible security context
+# The Volcano chart's controller deployment uses security contexts incompatible with OpenShift
+# This hook patches the deployment to use OpenShift-compatible security contexts
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: volcano-controller-patch
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "8"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      serviceAccountName: volcano-controller-patch
+      restartPolicy: OnFailure
+      containers:
+      - name: kubectl
+        image: registry.redhat.io/openshift4/ose-cli:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          # Wait for controller deployment to be created
+          sleep 10
+          
+          DEPLOYMENT_NAME="{{ .Release.Name }}-controllers"
+          NAMESPACE="{{ .Values.namespace.name }}"
+          
+          echo "Patching Volcano controller deployment: $DEPLOYMENT_NAME"
+          
+          # Patch the deployment to remove pod-level security context and fix container security context
+          oc patch deployment $DEPLOYMENT_NAME -n $NAMESPACE --type='json' -p='[
+            {
+              "op": "remove",
+              "path": "/spec/template/spec/securityContext"
+            },
+            {
+              "op": "replace",
+              "path": "/spec/template/spec/containers/0/securityContext",
+              "value": {
+                "runAsUser": 1000900000,
+                "runAsNonRoot": true,
+                "allowPrivilegeEscalation": false,
+                "capabilities": {
+                  "drop": ["ALL"]
+                },
+                "seccompProfile": {
+                  "type": "RuntimeDefault"
+                }
+              }
+            }
+          ]' || echo "Deployment $DEPLOYMENT_NAME not found or already patched"
+          
+          echo "Volcano controller deployment patching completed"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: volcano-controller-patch
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: volcano-controller-patch
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: volcano-controller-patch
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+subjects:
+- kind: ServiceAccount
+  name: volcano-controller-patch
+  namespace: {{ .Values.namespace.name }}
+roleRef:
+  kind: Role
+  name: volcano-controller-patch
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
