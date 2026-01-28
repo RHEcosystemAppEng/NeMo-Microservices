@@ -1,7 +1,10 @@
 {{- if .Values.customizer.enabled }}
 # Role and RoleBinding for NemoCustomizer SCC access
-# Only the customizer ServiceAccount gets access to nemo-customizer-scc
-# This follows the principle of least privilege - each workload gets only the SCC it needs
+# Grants nemo-customizer-scc to:
+# 1. Customizer ServiceAccount (nemocustomizer-sample) - for customizer workloads
+# 2. Default ServiceAccount - for entity handler jobs created by NemoTrainingJob
+#    Entity handler jobs use the default ServiceAccount and need RunAsAny to support
+#    non-numeric users (e.g., 'nvs') in container images
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -30,6 +33,9 @@ metadata:
 subjects:
 - kind: ServiceAccount
   name: {{ .Values.customizer.name }}
+  namespace: {{ .Values.namespace.name }}
+- kind: ServiceAccount
+  name: default
   namespace: {{ .Values.namespace.name }}
 roleRef:
   kind: Role

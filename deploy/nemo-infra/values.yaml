@@ -154,6 +154,7 @@ customizer-mlflow:
     defaultBuckets: "mlflow"
     persistence:
       mountPath: "/data"
+      size: 50Gi  # Increased from default 8Gi for model storage
     enableDefaultInitContainers: false
     provisioning:
       enabled: false
@@ -163,6 +164,8 @@ customizer-mlflow:
         value: "minioadmin"
       - name: MINIO_ROOT_PASSWORD
         value: "minioadmin"
+      - name: MINIO_BROWSER
+        value: "on"
     command:
       - "/usr/bin/docker-entrypoint.sh"
     args:

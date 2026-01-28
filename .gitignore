@@ -1,6 +1,8 @@
 # JSON files
 *.json
 *.jsonl
+# Exception: training_dataset.json is public Red Hat privacy policy data, safe to commit
+!demos/customizer-test/training_dataset.json
 .DS_Store
 demos/llamastack/Llama_Stack_NVIDIA_E2E_Flow_include_outputs.ipynb
 

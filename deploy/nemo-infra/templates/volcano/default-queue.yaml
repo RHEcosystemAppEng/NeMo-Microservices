@@ -3,10 +3,71 @@
 # Volcano Jobs require a queue to be created before they can be scheduled
 # The scheduler tries to create this in-memory but it needs to be persisted
 # This is a post-install hook to ensure Volcano CRDs are installed first
-apiVersion: scheduling.volcano.sh/v1beta1
-kind: Queue
+# Using a Job hook with 'oc apply' to avoid deletion conflicts with Volcano webhook
+---
+# ServiceAccount and RBAC for queue patch hook
+apiVersion: v1
+kind: ServiceAccount
 metadata:
-  name: default
+  name: volcano-queue-patch
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "19"
+    "helm.sh/hook-delete-policy": before-hook-creation
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: volcano-queue-patch
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "19"
+    "helm.sh/hook-delete-policy": before-hook-creation
+rules:
+- apiGroups:
+  - scheduling.volcano.sh
+  resources:
+  - queues
+  verbs:
+  - get
+  - list
+  - create
+  - update
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: volcano-queue-patch
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "19"
+    "helm.sh/hook-delete-policy": before-hook-creation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: volcano-queue-patch
+subjects:
+- kind: ServiceAccount
+  name: volcano-queue-patch
+  namespace: {{ .Values.namespace.name }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: volcano-default-queue
   namespace: {{ .Values.namespace.name }}
   labels:
     {{- include "nemo-infra.labels" . | nindent 4 }}
@@ -14,11 +75,38 @@ metadata:
   annotations:
     "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": "20"
-    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
-  weight: 1
-  capability:
-    cpu: "1000"
-    memory: "1000Gi"
-  reclaimable: true
+  template:
+    spec:
+      serviceAccountName: volcano-queue-patch
+      restartPolicy: OnFailure
+      containers:
+      - name: kubectl
+        image: registry.redhat.io/openshift4/ose-cli:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          # Apply the default queue (creates if missing, updates if exists)
+          # Using 'apply' instead of 'create' to avoid conflicts with existing queue
+          cat <<EOF | oc apply -f -
+          apiVersion: scheduling.volcano.sh/v1beta1
+          kind: Queue
+          metadata:
+            name: default
+            namespace: {{ .Values.namespace.name }}
+            labels:
+              app.kubernetes.io/name: nemo-infra
+              app.kubernetes.io/instance: nemo-infra
+              component: volcano
+          spec:
+            weight: 1
+            capability:
+              cpu: "1000"
+              memory: "1000Gi"
+            reclaimable: true
+            state: Open
+          EOF
+          echo "✅ Default queue applied successfully"
 {{- end }}

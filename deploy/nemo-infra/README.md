@@ -292,10 +292,10 @@ oc get svc -n <namespace> | grep admission
    - **Cause**: Missing default queue, controller not running, or PodGroup status not set
    - **Fix**:
      ```bash
-     # Check if default queue exists
+     # Check if default queue exists (chart creates it via post-install hook volcano-default-queue)
      oc get queue default -n <namespace>
      
-     # If missing, create it:
+     # If missing (e.g. volcano-default-queue hook failed), create it manually:
      cat <<EOF | oc apply -f -
      apiVersion: scheduling.volcano.sh/v1beta1
      kind: Queue
@@ -326,6 +326,14 @@ oc get svc -n <namespace> | grep admission
      
      # Note: The PodGroup status patch hook (podgroup-status-patch.yaml) should handle this automatically
      # but you can manually patch if needed
+     ```
+
+   - **If post-install fails with "default queue can not be deleted"**: The chart uses a Job hook that applies the queue (no delete). If you see this, you may have an older chart; ensure you have the updated `default-queue.yaml` that uses a Job and `volcano-queue-patch` ServiceAccount.
+   - **If job volcano-default-queue fails with "serviceaccount volcano-queue-patch not found"**: The ServiceAccount is defined in the same template. Ensure the chart was installed/upgraded successfully; or create it manually (see `templates/volcano/default-queue.yaml` for the Role and RoleBinding as well).
+   - **If Volcano Job exists, PodGroup is Inqueue, queue is Open, but no worker pods are created**: The Volcano controller may be stuck in a state where it's not creating pods even when everything is configured correctly. This can happen after patching tolerations or recreating Volcano Jobs. **Fix**: Restart the Volcano controller pod to force re-sync:
+     ```bash
+     oc delete pod -n <namespace> -l app.kubernetes.io/name=volcano,app.kubernetes.io/component=controllers
+     # Wait ~10 seconds for controller to restart and create pods
      ```
 
 5. **Volcano worker pods stuck in Pending:**
@@ -556,7 +564,7 @@ nemo-infra/
 │       ├── webhook-patch.yaml  # Webhook namespace scoping and failure policy
 │       ├── clusterrole-patch.yaml  # ClusterRole patches
 │       ├── controller-patch.yaml  # Controller deployment security context patch
-│       └── default-queue.yaml  # Default queue creation
+│       └── default-queue.yaml  # Default queue (Job hook + volcano-queue-patch SA/RBAC)
 └── README.md              # This file
 ```
 
@@ -693,9 +701,12 @@ The Volcano chart's controller deployment uses security contexts incompatible wi
 ### 6. Default Queue Creation
 
 Volcano Jobs require a queue to be created before they can be scheduled. The scheduler attempts to create a default queue in-memory, but it needs to be persisted. The chart includes `templates/volcano/default-queue.yaml` that:
-- Creates the `default` queue in the deployment namespace
-- Configures queue with appropriate resource limits
-- Sets queue state to `Open` to allow job scheduling
+- Creates the `default` queue via a **post-install/post-upgrade Job hook** (not a direct Queue resource)
+- Uses `oc apply` so the queue is created or updated without deletion; Volcano's webhook forbids deleting the `default` queue, so a direct Queue resource with `hook-delete-policy: before-hook-creation` would fail
+- Defines ServiceAccount `volcano-queue-patch` and RBAC (Role + RoleBinding) for the hook so it can create/update queues
+- Configures the queue with appropriate resource limits and `state: Open` to allow job scheduling
+
+**Helm install/upgrade** creates the ServiceAccount, Role, RoleBinding, and Job; the Job runs once and applies the queue. No manual steps are needed for a normal install.
 
 ### 7. Webhook Failure Policy
 

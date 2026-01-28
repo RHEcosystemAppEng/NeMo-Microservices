@@ -215,10 +215,13 @@ OpenShift uses Security Context Constraints (SCCs) to control what security sett
 ### SCC Access Pattern
 
 **1. NemoCustomizer SCC (`nemo-customizer-scc`)**
-- **Purpose**: Allows model downloader jobs to run with specific security contexts
-- **Granted to**: `nemocustomizer-sample` ServiceAccount only
-- **Why**: Model downloader jobs need `RunAsAny` to match PVC ownership (user 1000, group 2000)
-- **Not granted to**: `default` ServiceAccount (principle of least privilege)
+- **Purpose**: Allows model downloader jobs and entity handler jobs to run with specific security contexts
+- **Granted to**: 
+  - `nemocustomizer-sample` ServiceAccount (for customizer workloads)
+  - `default` ServiceAccount (for entity handler jobs created by NemoTrainingJob)
+- **Why**: 
+  - Model downloader jobs need `RunAsAny` to match PVC ownership (user 1000, group 2000)
+  - Entity handler jobs use `default` ServiceAccount and need `RunAsAny` to support non-numeric users (e.g., 'nvs') in container images
 
 **2. Nonroot SCC (`nonroot`)**
 - **Purpose**: Standard SCC for inference workloads (requires non-root user)
