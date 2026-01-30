@@ -144,6 +144,12 @@ customizer-mlflow:
       tag: latest
   minio:
     enabled: true
+    # Single RWO PVC: use Recreate so rollout doesn't cause Multi-Attach (only one pod at a time).
+    updateStrategy:
+      type: Recreate
+    # MinIO console (web UI) left disabled — use embedded console via post-install hook that sets MINIO_BROWSER=on.
+    console:
+      enabled: false
     image:
       registry: quay.io
       repository: minio/minio
@@ -158,14 +164,13 @@ customizer-mlflow:
     enableDefaultInitContainers: false
     provisioning:
       enabled: false
-    # Note: MINIO_DEFAULT_BUCKETS is set via defaultBuckets above, don't duplicate in extraEnvVars
+    # MINIO_BROWSER=on is applied by post-install hook (templates/minio-console-patch.yaml); chart hardcodes "off" so we patch after deploy.
     extraEnvVars:
+      # Dev-only defaults — do NOT use in production; use a secret reference for real deployments.
       - name: MINIO_ROOT_USER
         value: "minioadmin"
       - name: MINIO_ROOT_PASSWORD
         value: "minioadmin"
-      - name: MINIO_BROWSER
-        value: "on"
     command:
       - "/usr/bin/docker-entrypoint.sh"
     args:

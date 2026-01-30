@@ -413,6 +413,31 @@ oc get svc -n <namespace> | grep postgresql
 </details>
 
 <details>
+<summary><strong>MinIO Issues</strong></summary>
+
+**Accessing the MinIO web console:**
+
+The Bitnami MLflow subchart deploys MinIO with the embedded console disabled by default. This chart applies a post-install/post-upgrade hook (`minio-console-patch.yaml`) that sets `MINIO_BROWSER=on` on the MinIO deployment so the embedded console is available.
+
+- **From your machine:** Port-forward MinIO API and console, then open the console in a browser:
+  ```bash
+  oc port-forward -n <namespace> svc/nemo-infra-minio 9000:9000 9001:9001
+  ```
+  Then open **http://localhost:9001** (default login: minioadmin / minioadmin, or check the MinIO secret in the namespace).
+
+- **In-cluster:** MinIO API is available at `http://nemo-infra-minio.<namespace>.svc.cluster.local:80` (port 80 serves the API).
+
+**MinIO rollout / Multi-Attach errors:**
+
+MinIO uses a ReadWriteOnce (RWO) PVC. If a rollout or upgrade leaves old pods stuck and new pods pending with "Multi-Attach" errors, the chart sets `customizer-mlflow.minio.updateStrategy.type: Recreate` so the deployment replaces the pod instead of rolling. If you need to force a clean pod:
+
+```bash
+oc delete pod -n <namespace> -l app.kubernetes.io/name=minio
+```
+
+</details>
+
+<details>
 <summary><strong>Milvus Issues</strong></summary>
 
 **Check Milvus components:**
@@ -558,13 +583,14 @@ nemo-infra/
 │   ├── _helpers.tpl        # Template helpers
 │   ├── namespace.yaml      # Namespace resource
 │   ├── evaluator/          # Evaluator component templates
-│   └── volcano/            # Volcano-specific templates
-│       ├── oc-rbac.yaml    # OpenShift RBAC configuration (SCC grants)
-│       ├── admission-init-override.yaml  # OpenShift-compatible admission init job
-│       ├── webhook-patch.yaml  # Webhook namespace scoping and failure policy
-│       ├── clusterrole-patch.yaml  # ClusterRole patches
-│       ├── controller-patch.yaml  # Controller deployment security context patch
-│       └── default-queue.yaml  # Default queue (Job hook + volcano-queue-patch SA/RBAC)
+│   ├── volcano/            # Volcano-specific templates
+│   │   ├── oc-rbac.yaml    # OpenShift RBAC configuration (SCC grants)
+│   │   ├── admission-init-override.yaml  # OpenShift-compatible admission init job
+│   │   ├── webhook-patch.yaml  # Webhook namespace scoping and failure policy
+│   │   ├── clusterrole-patch.yaml  # ClusterRole patches
+│   │   ├── controller-patch.yaml  # Controller deployment security context patch
+│   │   └── default-queue.yaml  # Default queue (Job hook + volcano-queue-patch SA/RBAC)
+│   └── minio-console-patch.yaml   # Post-install hook: enables MinIO embedded console (MINIO_BROWSER=on)
 └── README.md              # This file
 ```
 
@@ -735,6 +761,10 @@ Volcano Jobs create pods, but the Volcano scheduler requires the `scheduling.vol
 ### 10. Global Security Settings
 
 Added `global.security.allowInsecureImages: true` to suppress warnings about custom images (PostgreSQL, MinIO, Python, etc.).
+
+### 11. MinIO Embedded Console
+
+The upstream Bitnami MLflow chart deploys MinIO with `MINIO_BROWSER=off`. The chart includes `templates/minio-console-patch.yaml` (post-install/post-upgrade hook) that patches the MinIO deployment to set `MINIO_BROWSER=on` so the embedded web console is available. After install, port-forward `svc/nemo-infra-minio` with ports 9000 and 9001, then open http://localhost:9001 to use the console. The chart also sets `customizer-mlflow.minio.updateStrategy.type: Recreate` for clean rollouts when using a ReadWriteOnce PVC.
 
 ---
 

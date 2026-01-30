@@ -117,21 +117,14 @@ if oc get svc nemo-infra-minio -n "$NAMESPACE" &> /dev/null; then
         echo "   ⚠️  MinIO API port-forward failed"
     fi
 fi
-# MinIO web console: forward to pod (console is on pod port 9001)
+# MinIO web console: embedded in main MinIO pod on port 9001 (no separate console image)
 MINIO_POD=$(oc get pods -n "$NAMESPACE" -l app.kubernetes.io/name=minio -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
 if [ -n "$MINIO_POD" ]; then
     echo "   Forwarding MinIO console: localhost:9001 -> $MINIO_POD:9001"
     oc port-forward -n "$NAMESPACE" "pod/$MINIO_POD" 9001:9001 > /dev/null 2>&1 &
-    PF_PID=$!
-    echo "$PF_PID" >> "$PIDS_FILE"
-    sleep 2
-    if kill -0 "$PF_PID" 2>/dev/null; then
-        echo "   ✅ MinIO web console port-forward started (http://localhost:9001)"
-    else
-        echo "   ⚠️  MinIO console port-forward failed"
-    fi
-else
-    echo "   ⚠️  MinIO pod not found - console (9001) not forwarded"
+    echo "$!" >> "$PIDS_FILE"
+    sleep 1
+    echo "   ✅ MinIO console (http://localhost:9001)"
 fi
 
 echo ""

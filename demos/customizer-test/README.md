@@ -12,9 +12,10 @@ We ran `customize-model.ipynb` first, used scripts to download the customized mo
 2. **Download customized model** (scripts, from your machine)  
    With port-forwards running (`./setup_port_forwards.sh`):
    ```bash
-   python export_model_from_entity_store.py          # or --job-id <id>
+   python export_model_from_entity_store.py          # auto-finds last completed job; or --job-id <id>
    python download_model_from_datastore.py --model-info model_info.json --output-dir ./downloaded_model
    ```
+   **Note:** Job ID from the Customizer API is case-sensitive (e.g. `cust-DTR3HNmLYwkPtdNEvoUrzS`). Get it from `curl -s http://localhost:8003/v1/customization/jobs` if using `--job-id`.
 
 3. **Merge customized adapter with base model** (script)  
    Merge the downloaded adapter and base model into a full model:
@@ -192,10 +193,7 @@ python download_model_from_datastore.py --files-url "hf://anemo-rhoai/model-name
 oc logs -n anemo-rhoai <job-id>-entity-handler-1-<pod-suffix> | grep -i "upload\|export\|completed"
 ```
 
-If EntityHandler failed, download from PVC instead:
-```bash
-python download_model_from_pvc.py --job-id <job-id> --output-dir ./downloaded_model
-```
+If EntityHandler failed, the model may not be available in DataStore; ensure the customization job completed and EntityHandler ran successfully before retrying the download.
 
 ### Service Not Responding
 
@@ -221,20 +219,21 @@ If you see connection errors:
 
 ## Workflow Overview
 
-This demo consists of two notebooks that work together:
+This demo consists of two notebooks plus scripts:
 
-1. **`customize-model.ipynb`** - Training Phase (Steps 1-17)
+1. **`customize-model.ipynb`** - Training Phase (Steps 1–17)
    - Customizes the model using Customizer service
    - Uploads training data to DataStore
    - Creates and monitors customization job
-   - Outputs customized model name
+   - Outputs customized model name (or job ID)
 
-2. **`test-customized-model.ipynb`** - Testing Phase (Steps 18+)
-   - Downloads customized model from DataStore (EntityHandler exports automatically)
-   - Deploys model to MinIO for RHOAI SSR
-   - Tests the customized model and compares with base model
+2. **Scripts** (run from your machine with port-forwards): export → download → merge → upload to MinIO; then patch InferenceService and restart SSR pod (see [End-to-end workflow](#end-to-end-workflow-steps-we-follow) above).
 
-**Important**: EntityHandler automatically exports customized models to DataStore after training completes. The model files are stored with a revision tag (e.g., `@1.0`). The download scripts handle this automatically.
+3. **`test-customized-model.ipynb`** - Testing Phase
+   - Tests the customized model (already deployed to MinIO and served by SSR)
+   - Compares responses with base model
+
+**Important**: EntityHandler automatically exports customized models to DataStore after training completes. The model files are stored with a revision tag (e.g., `@1.0`). The export and download scripts handle this; you must merge the adapter with the base model and upload the merged model to MinIO before testing.
 
 ## Complete Workflow
 
@@ -259,25 +258,9 @@ Execute `customize-model.ipynb` to train/customize your model:
 
 ### Step 2: Export Customized Model
 
-After training completes, you need to export the model from Entity Store/DataStore and deploy it to MinIO.
+After training completes, you need to export the model from Entity Store/DataStore, merge with base model, and deploy to MinIO.
 
-**Quick Start (Automated):**
-```bash
-# 1. Setup port-forwards (if running from local machine)
-./setup_port_forwards.sh
-
-# 2. Install dependencies
-pip install -r requirements.txt
-
-# 3. Run the complete workflow script
-python export_and_deploy_model.py --model-name "anemo-rhoai/llama-3.2-1b-instruct-custom-1234567890-12345@1.0"
-```
-
-**Note:** The scripts automatically detect if you're running locally (using port-forwards) or in cluster. 
-They default to `localhost:8001/8002/8003` for local development, or you can set `DATASTORE_URL`, 
-`ENTITY_STORE_URL` environment variables.
-
-**Or use individual scripts (Manual Steps):**
+**Use individual scripts (from your machine with port-forwards):**
 
 #### 2.1 Get Customized Model Information
 
@@ -424,13 +407,15 @@ print(f"   Downloaded {len(model_files)} files")
 
 #### 2.3 Upload Model to MinIO
 
+Upload the **merged** model (output of `merge_adapter_with_base.py`), not the downloaded adapter.
+
 **Using Python Script:**
 ```bash
-# Upload to new path
-python upload_model_to_minio.py --model-dir ./downloaded_model --target-path "models/llama-3.2-1b-instruct-custom"
+# With MinIO port-forward (from setup_port_forwards.sh)
+MINIO_ENDPOINT=http://localhost:9000 python upload_model_to_minio.py --model-dir ./merged_model --target-path models/llama-3.2-1b-instruct-cust
 
-# Or update existing model (replaces base model)
-python upload_model_to_minio.py --model-dir ./downloaded_model --update-existing
+# Or use a different path (e.g. llama-3.2-1b-instruct-custom)
+# MINIO_ENDPOINT=http://localhost:9000 python upload_model_to_minio.py --model-dir ./merged_model --target-path models/llama-3.2-1b-instruct-custom
 ```
 
 **Or manually:**
@@ -523,13 +508,13 @@ After deploying the model to MinIO, execute `test-customized-model.ipynb`:
 
 ## Alternative: Using MinIO Console
 
-If you have access to MinIO Console UI:
+If you have access to MinIO web console:
 
-1. **Download from DataStore**: Use the HuggingFace API script above to download locally
+1. **Download from DataStore**: Use the scripts above to download and merge locally
 2. **Upload via Console**: 
-   - Access MinIO Console (usually at `http://minio-console.<namespace>.svc.cluster.local:9001`)
-   - Navigate to your bucket
-   - Upload files to `models/llama-3.2-1b-instruct-custom/` (or your target path)
+   - With port-forwards: run `./setup_port_forwards.sh`, then open **http://localhost:9001** (embedded MinIO console; login: minioadmin / minioadmin)
+   - Navigate to bucket `models`, create or open the target path (e.g. `llama-3.2-1b-instruct-cust`)
+   - Upload the **merged** model files from `./merged_model/`
 
 ## Alternative: Using MinIO Client (mc)
 

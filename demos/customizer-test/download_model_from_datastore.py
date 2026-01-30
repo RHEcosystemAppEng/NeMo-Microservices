@@ -79,7 +79,7 @@ def parse_files_url(files_url):
 def download_model(files_url, output_dir, datastore_url=None, job_id=None, model_name=None):
     """Download model files from DataStore using HuggingFace API.
     
-    If DataStore is empty, this will suggest using download_model_from_pvc.py as fallback.
+    If DataStore is empty, this will suggest checking EntityHandler logs and retrying after export completes.
     """
     if datastore_url is None:
         datastore_url = DATASTORE_URL
@@ -184,22 +184,10 @@ def download_model(files_url, output_dir, datastore_url=None, job_id=None, model
             if len(model_files) == 0 or (len(model_files) == 1 and model_files[0].name == '.gitattributes'):
                 print(f"\n⚠️  WARNING: Repository appears to be empty!")
                 print(f"   Only metadata files found (no actual model files)")
-                print(f"   This suggests the model files were not uploaded to DataStore")
-                print(f"\n💡 Model files are likely in PVC or training pod")
-                print(f"\n🔄 Attempting to download from PVC/training pod as fallback...")
-                print(f"   (This requires job_id or model_name - checking if available)")
-                
-                # Try to get job_id from files_url or model_info if available
-                # This is a fallback - we'll create a separate script for PVC download
-                print(f"\n📋 To download from PVC, use:")
-                print(f"   python download_model_from_pvc.py --job-id <job-id> --output-dir {output_dir}")
-                print(f"   Or:")
-                print(f"   python download_model_from_pvc.py --model-name <model-name> --output-dir {output_dir}")
-                print(f"\n   The download_model_from_pvc.py script will:")
-                print(f"   1. Find the training pod (if still exists)")
-                print(f"   2. Or access the workspace PVC directly")
-                print(f"   3. Download model files from /pvc/workspace or similar location")
-                
+                print(f"   This suggests the model files were not uploaded to DataStore yet.")
+                print(f"\n💡 Check EntityHandler logs to verify export completed:")
+                print(f"   oc logs -n <namespace> <job-id>-entity-handler-1-<pod-suffix> | grep -i upload")
+                print(f"   Then retry this script once export has completed.")
                 return False
             
             print(f"\n✅ Download complete!")

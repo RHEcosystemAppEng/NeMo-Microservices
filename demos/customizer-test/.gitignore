@@ -32,7 +32,7 @@ env.donotcommit
 *.pt
 *.pth
 *.ckpt
-# Downloaded model directories (from DataStore/PVC)
+# Downloaded model directories (from DataStore)
 downloaded_model/
 downloaded_model_*/
 # Merged model directories (from merge script)
