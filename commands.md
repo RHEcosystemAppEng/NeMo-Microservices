@@ -50,15 +50,32 @@ oc get servicemeshmember -n $NAMESPACE
 ## Infrastructure Installation
 
 ### 1. Install nemo-infra
+
+**Prerequisites:**
+- OpenShift 4.x cluster
+- Helm 3.x installed
+- `oc` CLI configured and authenticated
+- Sufficient cluster resources (CPU, memory, storage)
+- Access to container registries (Docker Hub, NGC, Quay.io)
+
 ```bash
 cd NeMo-Microservices/deploy/nemo-infra
 
-# Update Helm dependencies
+# Update Helm dependencies (downloads all subcharts)
 helm dependency update
 
 # Install infrastructure (namespace should already exist)
-helm install nemo-infra . -n $NAMESPACE
+helm install nemo-infra . -n $NAMESPACE --create-namespace --wait --timeout 30m
 ```
+
+**Expected Components:**
+- PostgreSQL (5 instances: datastore, entity-store, customizer, guardrail, evaluator)
+- MLflow tracking server
+- OpenTelemetry Collector (2 instances: customizer, evaluator)
+- Argo Workflows (server + controller)
+- Milvus standalone (vector database)
+- Volcano Scheduler + Admission (required for NeMo Operator)
+- MinIO (object storage for MLflow artifacts)
 
 ### 2. Wait for Infrastructure (Optional - can proceed while starting)
 ```bash
@@ -71,12 +88,172 @@ oc wait --for=condition=ready pod -l app.kubernetes.io/instance=nemo-infra -n $N
 
 ### 3. Verify Infrastructure is Ready
 ```bash
-# Check all infrastructure pods
+# Check all infrastructure pods (should show 15 pods, all Running)
 oc get pods -n $NAMESPACE | grep nemo-infra
 
-# Verify operators are running
+# Expected output:
+# - nemo-infra-*-postgresql-0 (5 pods)
+# - nemo-infra-customizer-mlflow-tracking-*
+# - nemo-infra-customizer-opentelemetry-*
+# - nemo-infra-evaluator-opentelemetry-*
+# - nemo-infra-argo-workflows-server-*
+# - nemo-infra-argo-workflows-workflow-controller-*
+# - nemo-infra-evaluator-milvus-standalone-*
+# - nemo-infra-scheduler-*
+# - nemo-infra-admission-*
+# - nemo-infra-minio-*
+
+# Verify all pods are Running
+oc get pods -n $NAMESPACE | grep nemo-infra | grep -v Running
+# Should return no results if all are running
+
+# Verify operators are running (if nemo-instances is installed)
 oc get pods -n $NAMESPACE | grep -E "operator|controller"
 ```
+
+### 4. Clean Uninstall and Reinstall (For Fresh Deployment)
+
+To ensure a clean deployment from scratch:
+
+```bash
+# Step 1: Uninstall existing deployment
+helm uninstall nemo-infra -n $NAMESPACE
+
+# Step 2: Wait for resources to be cleaned up
+oc get pods -n $NAMESPACE | grep nemo-infra
+# Wait until no nemo-infra pods remain (except PVCs which are retained)
+
+# Step 3: Clean up any orphaned resources (if needed)
+oc delete job,serviceaccount,role,rolebinding -n $NAMESPACE -l component=volcano --ignore-not-found=true
+
+# Step 4: Clean up any stuck Pulsar resources (if upgrading from Milvus v5.0.12)
+oc delete statefulset,job,pod,svc -n $NAMESPACE -l app.kubernetes.io/name=pulsar --ignore-not-found=true
+oc get svc -n $NAMESPACE | grep pulsarv3 | awk '{print $1}' | xargs -r oc delete svc -n $NAMESPACE --ignore-not-found=true
+
+# Step 5: Reinstall fresh
+cd NeMo-Microservices/deploy/nemo-infra
+helm dependency update
+helm install nemo-infra . -n $NAMESPACE --create-namespace --wait --timeout 30m
+```
+
+### 5. Troubleshooting Infrastructure Issues
+
+**If Volcano admission-init job fails:**
+```bash
+# Grant privileged SCC to admission service account
+oc adm policy add-scc-to-user privileged system:serviceaccount:$NAMESPACE:nemo-infra-admission
+
+# Delete the failing job to trigger recreation
+oc delete job nemo-infra-admission-init-* -n $NAMESPACE
+```
+
+**If Volcano scheduler fails with "no endpoints available":**
+```bash
+# Grant privileged SCC to admission service account
+oc adm policy add-scc-to-user privileged system:serviceaccount:$NAMESPACE:nemo-infra-admission
+
+# Delete the failing admission replicaset to trigger recreation
+oc delete replicaset -n $NAMESPACE -l app.kubernetes.io/name=volcano,app.kubernetes.io/component=admission
+
+# Wait for admission pod to be ready
+oc wait --for=condition=ready pod -l app.kubernetes.io/name=volcano,app.kubernetes.io/component=admission -n $NAMESPACE --timeout=300s
+
+# Delete scheduler pod to trigger recreation
+oc delete pod -n $NAMESPACE -l app.kubernetes.io/name=volcano,app.kubernetes.io/component=scheduler
+```
+
+**If Volcano Jobs not creating worker pods:**
+```bash
+# Check if default queue exists (chart creates it via post-install hook volcano-default-queue)
+oc get queue default -n $NAMESPACE
+
+# If missing (e.g. hook failed or volcano-queue-patch SA was not created), create it manually:
+cat <<EOF | oc apply -f -
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: Queue
+metadata:
+  name: default
+  namespace: $NAMESPACE
+spec:
+  weight: 1
+  capability:
+    cpu: "1000"
+    memory: "1000Gi"
+  reclaimable: true
+  state: Open
+EOF
+
+# Verify controller is running
+oc get pods -n $NAMESPACE | grep controllers
+
+# Check PodGroups and set status if needed
+oc get podgroup -n $NAMESPACE
+
+# If PodGroup status is empty, set it to Inqueue (required for pod creation):
+PODGROUP_NAME=$(oc get podgroup -n $NAMESPACE | grep <job-name> | awk '{print $1}' | head -1)
+if [ -n "$PODGROUP_NAME" ]; then
+  oc patch podgroup $PODGROUP_NAME -n $NAMESPACE --type='json' \
+    -p='[{"op": "add", "path": "/status/phase", "value": "Inqueue"}]'
+fi
+
+# If Volcano Job exists, PodGroup is Inqueue, queue is Open, but no worker pods are created:
+# The Volcano controller may be stuck. Restart it to force re-sync:
+oc delete pod -n $NAMESPACE -l app.kubernetes.io/name=volcano,app.kubernetes.io/component=controllers
+# Wait ~10 seconds for controller to restart and create pods
+```
+
+**If Volcano worker pods stuck in Pending (not being scheduled):**
+```bash
+# Check if pod has PodGroup annotation (required for scheduling)
+WORKER_POD=$(oc get pods -n $NAMESPACE -l volcano.sh/job-name -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+if [ -n "$WORKER_POD" ]; then
+  oc get pod $WORKER_POD -n $NAMESPACE -o jsonpath='{.metadata.annotations.scheduling\.volcano\.sh/podgroup}'
+  echo ""
+fi
+
+# If annotation is missing, find PodGroup and add it:
+PODGROUP_NAME=$(oc get podgroup -n $NAMESPACE | grep <job-name> | awk '{print $1}' | head -1)
+if [ -n "$WORKER_POD" ] && [ -n "$PODGROUP_NAME" ]; then
+  oc patch pod $WORKER_POD -n $NAMESPACE --type='json' \
+    -p="[{\"op\": \"add\", \"path\": \"/metadata/annotations/scheduling.volcano.sh~1podgroup\", \"value\": \"$PODGROUP_NAME\"}]"
+  
+  # Also ensure PodGroup status is set
+  oc patch podgroup $PODGROUP_NAME -n $NAMESPACE --type='json' \
+    -p='[{"op": "add", "path": "/status/phase", "value": "Inqueue"}]'
+fi
+
+# Verify the PodGroup annotation controller is running (auto-patches new pods)
+oc get pods -n $NAMESPACE | grep podgroup-annotation-controller
+
+# Check controller logs
+oc logs -n $NAMESPACE -l app=volcano-podgroup-annotation-controller --tail=50
+```
+
+**If Milvus is crashing or Pulsar components are stuck:**
+```bash
+# Verify Milvus is using v4.1.11 (not v5.0.12)
+helm get values nemo-infra -n $NAMESPACE | grep -A 5 milvus
+
+# Clean up stuck Pulsar resources
+oc delete statefulset,job,pod,svc -n $NAMESPACE -l app.kubernetes.io/name=pulsar --ignore-not-found=true
+oc get svc -n $NAMESPACE | grep pulsarv3 | awk '{print $1}' | xargs -r oc delete svc -n $NAMESPACE --ignore-not-found=true
+
+# Verify Milvus configuration
+oc get configmap -n $NAMESPACE | grep milvus
+oc logs -n $NAMESPACE -l app.kubernetes.io/name=milvus --tail=100
+```
+
+**If Argo Workflows service account conflict:**
+```bash
+# Delete the conflicting service account
+oc delete sa argo-workflows-executor -n $NAMESPACE
+
+# Retry the upgrade
+cd NeMo-Microservices/deploy/nemo-infra
+helm upgrade nemo-infra . -n $NAMESPACE
+```
+
+For more detailed troubleshooting, see [deploy/nemo-infra/README.md](deploy/nemo-infra/README.md#troubleshooting).
 
 ## Instances Installation
 
@@ -122,6 +299,8 @@ helm install nemo-instances . -n $NAMESPACE \
   --set llamastack.enabled=false
 ```
 
+**GPU taints:** The chart's `values.yaml` includes tolerations for `g5-gpu`, `g6e-gpu`, `nvidia.com/gpu`, and `node-role.kubernetes.io/master` for all GPU workloads (NIMCache, NIMPipeline, Customizer). A fresh install works on clusters that use either g5-gpu or g6e-gpu (and master) taints—**no separate patch commands are needed** after install.
+
 ### 2. Wait for Services to Start (Optional)
 
 ```bash
@@ -155,18 +334,20 @@ oc get pods -n $NAMESPACE | grep rerankqa
 
 If your cluster has GPU nodes with taints, you must add GPU tolerations to your InferenceService during deployment (or patch it immediately after). Otherwise, pods will be stuck in `Pending` state.
 
+**Note:** NIMCache and NIMPipeline pods (from `nemo-instances` Helm chart) already get GPU tolerations from the chart's `values.yaml` (g5-gpu, g6e-gpu, nvidia.com/gpu, node-role.kubernetes.io/master). No separate patch is needed for those after a fresh install. The following applies to **InferenceService** (KServe) and **Notebook/Workbench** resources you deploy separately.
+
 **Check if GPU nodes have taints:**
 ```bash
 # Check for GPU taints on nodes
 oc get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints | grep -E "gpu|GPU"
 
-# If you see taints like "g5-gpu=true:NoSchedule" or "nvidia.com/gpu=true:NoSchedule",
-# you need to add tolerations to your InferenceService (see below)
+# If you see taints like "g5-gpu=true:NoSchedule", "g6e-gpu=true:NoSchedule", or "nvidia.com/gpu=...",
+# add matching tolerations to InferenceService or Notebook (see below)
 ```
 
 **If GPU taints exist, deploy InferenceService with tolerations:**
 
-When deploying your InferenceService (via NIMPipeline, YAML, etc.), include GPU tolerations in the spec:
+When deploying your InferenceService (via NIMPipeline, YAML, etc.), include GPU tolerations in the spec (include both g5-gpu and g6e-gpu if your cluster may use either):
 
 ```yaml
 spec:
@@ -176,17 +357,35 @@ spec:
         operator: "Equal"
         value: "true"
         effect: "NoSchedule"
+      - key: "g6e-gpu"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
       - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "node-role.kubernetes.io/master"
         operator: "Exists"
         effect: "NoSchedule"
 ```
 
 **Or patch after deployment (if you forgot):**
 ```bash
-# Add GPU tolerations to InferenceService (for both g5-gpu and nvidia.com/gpu taints)
-oc patch inferenceservice <inferenceservice-name> -n $NAMESPACE --type='merge' -p='{"spec":{"predictor":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}]}}}'
+# Add GPU tolerations (g5-gpu, g6e-gpu, nvidia.com/gpu, master) for common OpenShift GPU nodes
+oc patch inferenceservice <inferenceservice-name> -n $NAMESPACE --type='merge' -p='{"spec":{"predictor":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}'
 
-# IMPORTANT: After patching, scale down old revision to 0
+# For NemoTrainingJob (Customizer training jobs) - if worker pods are pending:
+# 1. Patch the NemoTrainingJob to add g6e-gpu and master tolerations:
+oc patch nemotrainingjob <job-name> -n $NAMESPACE --type='merge' -p='{"spec":{"trainingWorkload":{"trainerOverrides":{"spec":{"tolerations":[{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}}}'
+
+# 2. Delete the Volcano Job so operator recreates it with new tolerations:
+VOLCANO_JOB=$(oc get job.batch.volcano.sh -n $NAMESPACE | grep <job-name> | awk '{print $1}')
+oc delete job.batch.volcano.sh $VOLCANO_JOB -n $NAMESPACE
+
+# 3. If worker pods still don't appear after Volcano Job is recreated, restart Volcano controller:
+oc delete pod -n $NAMESPACE -l app.kubernetes.io/name=volcano,app.kubernetes.io/component=controllers
+
+# IMPORTANT: After patching InferenceService, scale down old revision to 0
 oc get deployment -n $NAMESPACE | grep <inferenceservice-name>-predictor
 oc scale deployment <deployment-name-old> -n $NAMESPACE --replicas=0
 ```
@@ -362,11 +561,11 @@ oc get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints | grep -E
 **If GPU taints exist, apply GPU tolerations to Workbench:**
 
 ```bash
-# Patch Notebook/Workbench CR to add GPU tolerations (for both g5-gpu and nvidia.com/gpu taints)
-oc patch notebook <notebook-name> -n $NAMESPACE --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}]}}}}'
+# Patch Notebook/Workbench CR to add GPU tolerations (g5-gpu, g6e-gpu, nvidia.com/gpu, master)
+oc patch notebook <notebook-name> -n $NAMESPACE --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}}'
 
 # Example (replace with your actual notebook name and namespace):
-# oc patch notebook anemo-rhoai-wb -n anemo-rhoai --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}]}}}}'
+# oc patch notebook anemo-rhoai-wb -n anemo-rhoai --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}}'
 
 # Find your notebook name:
 oc get notebook -n $NAMESPACE
@@ -515,6 +714,9 @@ oc taint nodes <gpu-node-name> nvidia.com/gpu=true:NoSchedule
 # Apply g5-gpu taint to a GPU node
 oc taint nodes <gpu-node-name> g5-gpu=true:NoSchedule
 
+# Apply g6e-gpu taint (e.g. some OpenShift GPU node types)
+oc taint nodes <gpu-node-name> g6e-gpu=true:NoSchedule
+
 # Apply both taints (if needed)
 oc taint nodes <gpu-node-name> nvidia.com/gpu=true:NoSchedule g5-gpu=true:NoSchedule
 
@@ -531,14 +733,14 @@ done
 
 ### Apply GPU Tolerations to InferenceService
 
-If your cluster has GPU nodes with taints (e.g., `g5-gpu=true:NoSchedule` or `nvidia.com/gpu=true:NoSchedule`), you need to add tolerations to your InferenceService:
+If your cluster has GPU nodes with taints (e.g., `g5-gpu`, `g6e-gpu`, or `nvidia.com/gpu`), add tolerations to your InferenceService. (NIMCache/NIMPipeline from the nemo-instances chart already get these from `values.yaml` on fresh install.)
 
 ```bash
-# Add GPU tolerations to InferenceService (for both g5-gpu and nvidia.com/gpu taints)
-oc patch inferenceservice <inferenceservice-name> -n $NAMESPACE --type='merge' -p='{"spec":{"predictor":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}]}}}'
+# Add GPU tolerations (g5-gpu, g6e-gpu, nvidia.com/gpu, master) for common OpenShift GPU nodes
+oc patch inferenceservice <inferenceservice-name> -n $NAMESPACE --type='merge' -p='{"spec":{"predictor":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}'
 
 # Example (replace with your actual InferenceService name and namespace):
-# oc patch inferenceservice my-model -n my-namespace --type='merge' -p='{"spec":{"predictor":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}]}}}'
+# oc patch inferenceservice my-model -n my-namespace --type='merge' -p='{"spec":{"predictor":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}'
 
 # IMPORTANT: Ensure only one instance is running
 # When you patch the InferenceService, KServe may create a new revision while keeping the old one.
@@ -570,11 +772,11 @@ oc get pod <pod-name-new> -n $NAMESPACE -o wide
 For Notebook or Workbench resources that are pending due to missing GPU tolerations:
 
 ```bash
-# Patch Notebook CR to add GPU tolerations (for both g5-gpu and nvidia.com/gpu taints)
-oc patch notebook <notebook-name> -n $NAMESPACE --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}]}}}}'
+# Patch Notebook CR to add GPU tolerations (g5-gpu, g6e-gpu, nvidia.com/gpu, master)
+oc patch notebook <notebook-name> -n $NAMESPACE --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}}'
 
 # Example (replace with your actual notebook name and namespace):
-# oc patch notebook my-notebook -n my-namespace --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}]}}}}'
+# oc patch notebook my-notebook -n my-namespace --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}}'
 
 # Delete the pending pod to trigger recreation with new tolerations
 oc delete pod <pod-name-pending> -n $NAMESPACE
@@ -658,21 +860,50 @@ This indicates that the service account name was not properly set. **Solution**:
 
 If a pod is stuck in `Pending` state with events showing "untolerated taint":
 
+**Note:** 
+- **Fresh installs**: NIMCache, NIMPipeline, and Customizer workloads from the `nemo-instances` chart get GPU tolerations (g5-gpu, g6e-gpu, nvidia.com/gpu, master) from `values.yaml` automatically. **No separate patch commands are needed** for new resources created after install.
+- **Existing resources**: If you have NIMCache, NIMPipeline, or NemoTrainingJob resources created before `values.yaml` was updated with g6e-gpu tolerations, you have two options:
+  1. **Upgrade Helm release** (recommended): Run `helm upgrade nemo-instances` to update Customizer CR tolerations, then patch existing NemoTrainingJobs:
+     ```bash
+     # Upgrade to refresh Customizer CR tolerations
+     cd NeMo-Microservices/deploy/nemo-instances
+     helm upgrade nemo-instances . -n $NAMESPACE --set namespace.name=$NAMESPACE --set llamastack.enabled=false --reuse-values
+     
+     # Patch existing NemoTrainingJobs (if any are pending):
+     for JOB in $(oc get nemotrainingjob -n $NAMESPACE -o jsonpath='{.items[*].metadata.name}'); do
+       oc patch nemotrainingjob $JOB -n $NAMESPACE --type='merge' -p='{"spec":{"trainingWorkload":{"trainerOverrides":{"spec":{"tolerations":[{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}}}'
+     done
+     ```
+  2. **Manual patch**: Patch NIMCache, NIMPipeline, or NemoTrainingJob resources directly (see patches below).
+- **Volcano controller stuck**: If Volcano Jobs exist, PodGroup is Inqueue, queue is Open, but no worker pods are created, the Volcano controller may be stuck. Restart it: `oc delete pod -n $NAMESPACE -l app.kubernetes.io/name=volcano,app.kubernetes.io/component=controllers`
+- For InferenceService and Notebook (deployed separately), use the patches below.
+
 ```bash
 # Check pod events to see why it's not scheduling
 oc describe pod <pod-name> -n $NAMESPACE | grep -A 10 "Events:"
 
-# Common error: "node(s) had untolerated taint {g5-gpu: true}" or "nvidia.com/gpu"
+# Common error: "node(s) had untolerated taint {g5-gpu: true}", "{g6e-gpu: true}", or "nvidia.com/gpu"
 # This means the pod needs GPU tolerations
 
-# Check what resource owns the pod (Notebook, InferenceService, etc.)
+# Check what resource owns the pod (Notebook, InferenceService, NIMCache, etc.)
 oc get pod <pod-name> -n $NAMESPACE -o jsonpath='{.metadata.ownerReferences[*].kind}'
 
-# For Notebook resources:
-oc patch notebook <notebook-name> -n $NAMESPACE --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}]}}}}'
+# For Notebook resources (use g5-gpu, g6e-gpu, nvidia.com/gpu, master for common OpenShift GPU nodes):
+oc patch notebook <notebook-name> -n $NAMESPACE --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}}'
 
 # For InferenceService:
-oc patch inferenceservice <inferenceservice-name> -n $NAMESPACE --type='merge' -p='{"spec":{"predictor":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}]}}}'
+oc patch inferenceservice <inferenceservice-name> -n $NAMESPACE --type='merge' -p='{"spec":{"predictor":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}'
+
+# For NemoTrainingJob (Customizer training jobs) - if worker pods are pending:
+# 1. Patch the NemoTrainingJob to add g6e-gpu and master tolerations:
+oc patch nemotrainingjob <job-name> -n $NAMESPACE --type='merge' -p='{"spec":{"trainingWorkload":{"trainerOverrides":{"spec":{"tolerations":[{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}}}'
+
+# 2. Delete the Volcano Job so operator recreates it with new tolerations:
+VOLCANO_JOB=$(oc get job.batch.volcano.sh -n $NAMESPACE | grep <job-name> | awk '{print $1}')
+oc delete job.batch.volcano.sh $VOLCANO_JOB -n $NAMESPACE
+
+# 3. If worker pods still don't appear after Volcano Job is recreated, restart Volcano controller:
+oc delete pod -n $NAMESPACE -l app.kubernetes.io/name=volcano,app.kubernetes.io/component=controllers
 
 # After patching, delete the pending pod to trigger recreation
 oc delete pod <pod-name> -n $NAMESPACE

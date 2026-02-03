@@ -241,9 +241,14 @@ After deployment, services are available at:
 
 - **NIMCache** and **NIMPipeline** (embedding model) require GPU nodes
   - Note: Chat models are deployed via RHOAI/OpenShift AI, not via Helm chart
-- GPU tolerations are pre-configured for:
+- **NemoCustomizer** training jobs require GPU nodes
+- GPU tolerations are pre-configured in `values.yaml` for:
   - `g5-gpu` taint
+  - `g6e-gpu` taint (for clusters using g6e-gpu nodes)
   - `nvidia.com/gpu` taint
+  - `node-role.kubernetes.io/master` taint (for master nodes)
+- **Fresh installs**: All GPU workloads (NIMCache, NIMPipeline, Customizer) automatically get these tolerations from `values.yaml`—no separate patch commands needed.
+- **Existing resources**: If you have resources created before `values.yaml` was updated, see [commands.md](../../commands.md#pod-stuck-in-pending-state-missing-gpu-tolerations) for patching instructions.
 
 ## Storage
 
@@ -311,6 +316,6 @@ The pre-delete hook (`pre-delete-cleanup.yaml`) automatically deletes Custom Res
 - This chart follows the quickstart Step 6 exactly (lines 152-164)
 - All namespace references are automatically templated
 - Service hostnames are automatically updated to match namespace
-- GPU tolerations are pre-configured for common OpenShift setups
+- GPU tolerations are pre-configured for common OpenShift setups (g5-gpu, g6e-gpu, nvidia.com/gpu, master)
 - **Pre-delete hook** automatically cleans up Custom Resources before Helm uninstall - just run `helm uninstall` and it works!
 

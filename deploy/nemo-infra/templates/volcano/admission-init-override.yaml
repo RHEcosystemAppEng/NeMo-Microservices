@@ -1,0 +1,151 @@
+{{- if .Values.install.volcano }}
+# Override Volcano's admission-init job with OpenShift-compatible version
+# This template replaces the Volcano chart's admission-init.yaml to fix SCC issues
+# The Volcano chart's admission-init job uses security contexts incompatible with OpenShift
+# We override it here with OpenShift-compatible security contexts
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-admission-init
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-weight": "0"
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-admission-init
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-weight": "0"
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create", "patch", "get"]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-admission-init-role
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-weight": "0"
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-admission-init
+    namespace: {{ .Values.namespace.name }}
+roleRef:
+  kind: Role
+  name: {{ .Release.Name }}-admission-init
+  apiGroup: rbac.authorization.k8s.io
+---
+# Grant privileged SCC to admission-init service account (required for OpenShift)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-admission-init-scc
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-weight": "0"
+rules:
+- apiGroups: ['security.openshift.io']
+  resources: ['securitycontextconstraints']
+  verbs: ['use']
+  resourceNames: ['privileged']
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-admission-init-scc-binding
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-weight": "0"
+subjects:
+- kind: ServiceAccount
+  name: {{ .Release.Name }}-admission-init
+  namespace: {{ .Values.namespace.name }}
+roleRef:
+  kind: Role
+  name: {{ .Release.Name }}-admission-init-scc
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-admission-init
+  namespace: {{ .Values.namespace.name }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-weight": "5"
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      annotations:
+        # Remove seccomp annotations that OpenShift rejects
+    spec:
+      serviceAccountName: {{ .Release.Name }}-admission-init
+      restartPolicy: OnFailure
+      securityContext:
+        # Remove SELinux options - let OpenShift assign them
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: main
+        image: "{{ .Values.volcano.custom.image_registry | default "docker.io" }}/{{ .Values.volcano.custom.admission_image_name | default "volcanosh/vc-webhook-manager" }}:{{ .Values.volcano.custom.image_tag_version | default "v1.13.1" }}"
+        command:
+        - ./gen-admission-secret.sh
+        - --service
+        - {{ .Release.Name }}-admission-service
+        - --namespace
+        - {{ .Values.namespace.name }}
+        - --secret
+        - volcano-admission-secret
+        securityContext:
+          # OpenShift-compatible security context
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          runAsUser: 1000900000  # OpenShift-compatible UID range
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi
+{{- end }}

@@ -1,0 +1,12 @@
+# Python dependencies for NeMo Customizer Test scripts
+# Install with: pip install -r requirements.txt
+
+# Core dependencies
+requests>=2.28.0
+python-dotenv>=0.19.0
+
+# For downloading models from DataStore (HuggingFace-compatible API)
+huggingface_hub>=0.16.0
+
+# For uploading models to MinIO (S3-compatible)
+boto3>=1.26.0

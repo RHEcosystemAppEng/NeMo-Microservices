@@ -1,13 +1,65 @@
 # JSON files
 *.json
 *.jsonl
-.DS_Store
-demos/llamastack/Llama_Stack_NVIDIA_E2E_Flow_include_outputs.ipynb
-
-# Demo scripts directory (contains sensitive tokens and real credentials)
-demo-scripts/
+# Exception: training_dataset.json is public Red Hat privacy policy data, safe to commit
+!demos/customizer-test/training_dataset.json
 
 # Environment files with sensitive tokens (never commit these!)
 **/env.donotcommit
 .env
 .env.local
+*.env
+
+# Demo scripts directory (contains sensitive tokens and real credentials)
+demo-scripts/
+
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Model files (can be large)
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+# Demo customizer-test: downloaded/merged/export dirs and notebook outputs
+downloaded_model/
+downloaded_model_*/
+merged_model/
+merged_model_*/
+model_export_*/
+base_model_responses.json
+base_model_responses.txt
+customized_model_responses.json
+customized_model_responses.txt
+
+# Temporary files
+*.tmp
+*.log
+*.pid
+/tmp/nemo_port_forwards_*.pids
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Demo-specific (tracked in repo but excluded from this tree)
+demos/llamastack/Llama_Stack_NVIDIA_E2E_Flow_include_outputs.ipynb

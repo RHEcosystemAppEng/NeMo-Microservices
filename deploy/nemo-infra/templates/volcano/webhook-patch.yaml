@@ -35,7 +35,7 @@ spec:
           # Get namespace from values
           NAMESPACE="{{ .Values.namespace.name }}"
           
-          # Patch all three Volcano webhooks to use In operator only
+          # Patch all three Volcano validating webhooks to use In operator only
           # Also set failurePolicy to Ignore to prevent pod creation failures when webhook times out
           # (e.g., due to Istio mesh NetworkPolicy blocking API server -> webhook connectivity)
           for webhook in jobs-validate pods-validate queues-validate; do
@@ -47,6 +47,21 @@ spec:
             echo "Webhook volcano-admission-service-$webhook namespace selector not found or already patched"
             # Patch failurePolicy to Ignore (allows pods to be created even if webhook times out)
             oc patch validatingwebhookconfiguration volcano-admission-service-$webhook \
+              --type='json' \
+              -p="[{\"op\": \"replace\", \"path\": \"/webhooks/0/failurePolicy\", \"value\": \"Ignore\"}]" || \
+            echo "Webhook volcano-admission-service-$webhook failurePolicy not found or already patched"
+          done
+          
+          # Patch mutating webhooks for queues and jobs
+          for webhook in queues-mutate jobs-mutate; do
+            echo "Patching volcano-admission-service-$webhook..."
+            # Patch namespace selector
+            oc patch mutatingwebhookconfiguration volcano-admission-service-$webhook \
+              --type='json' \
+              -p="[{\"op\": \"replace\", \"path\": \"/webhooks/0/namespaceSelector\", \"value\": {\"matchExpressions\": [{\"key\": \"kubernetes.io/metadata.name\", \"operator\": \"In\", \"values\": [\"$NAMESPACE\"]}]}}]" || \
+            echo "Webhook volcano-admission-service-$webhook namespace selector not found or already patched"
+            # Patch failurePolicy to Ignore (allows queues/jobs to be created even if webhook times out)
+            oc patch mutatingwebhookconfiguration volcano-admission-service-$webhook \
               --type='json' \
               -p="[{\"op\": \"replace\", \"path\": \"/webhooks/0/failurePolicy\", \"value\": \"Ignore\"}]" || \
             echo "Webhook volcano-admission-service-$webhook failurePolicy not found or already patched"
@@ -72,7 +87,7 @@ metadata:
     component: volcano
 rules:
 - apiGroups: ["admissionregistration.k8s.io"]
-  resources: ["validatingwebhookconfigurations"]
+  resources: ["validatingwebhookconfigurations", "mutatingwebhookconfigurations"]
   verbs: ["get", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

@@ -1,0 +1,100 @@
+{{- if .Values.install.volcano }}
+# Post-install hook to automatically set PodGroup status to "Inqueue" when created
+# Volcano Job controller requires PodGroup status to be set before creating pods
+# This hook watches for PodGroups with empty status and sets them to "Inqueue"
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: volcano-podgroup-status-patch
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "15"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      serviceAccountName: volcano-podgroup-patch
+      restartPolicy: OnFailure
+      containers:
+      - name: kubectl
+        image: registry.redhat.io/openshift4/ose-cli:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          # Wait for PodGroups to be created
+          sleep 5
+          
+          NAMESPACE="{{ .Values.namespace.name }}"
+          
+          echo "Checking for PodGroups with empty status in namespace $NAMESPACE..."
+          
+          # Get all PodGroups with empty status
+          PODGROUPS=$(oc get podgroup -n $NAMESPACE -o json | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          pgs = [pg['metadata']['name'] for pg in data['items'] if not pg.get('status', {}).get('phase')]
+          print(' '.join(pgs))
+          " 2>/dev/null || echo "")
+          
+          if [ -z "$PODGROUPS" ]; then
+            echo "No PodGroups with empty status found"
+            exit 0
+          fi
+          
+          # Patch each PodGroup to set status to Inqueue
+          for pg in $PODGROUPS; do
+            echo "Patching PodGroup $pg to set status.phase=Inqueue..."
+            oc patch podgroup $pg -n $NAMESPACE --type='json' \
+              -p='[{"op": "add", "path": "/status/phase", "value": "Inqueue"}]' || \
+            echo "Failed to patch PodGroup $pg (may already be patched)"
+          done
+          
+          echo "PodGroup status patching completed"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: volcano-podgroup-patch
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: volcano-podgroup-patch
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+rules:
+- apiGroups: ["scheduling.volcano.sh"]
+  resources: ["podgroups"]
+  verbs: ["get", "list", "patch"]
+- apiGroups: ["scheduling.volcano.sh"]
+  resources: ["podgroups/status"]
+  verbs: ["patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: volcano-podgroup-patch
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "nemo-infra.labels" . | nindent 4 }}
+    component: volcano
+subjects:
+- kind: ServiceAccount
+  name: volcano-podgroup-patch
+  namespace: {{ .Values.namespace.name }}
+roleRef:
+  kind: Role
+  name: volcano-podgroup-patch
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
