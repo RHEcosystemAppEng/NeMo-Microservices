@@ -1,0 +1,94 @@
+# LlamaStack (inference-only) for RHOAI — apply this + the API key secret.
+#
+# Why 2 files?
+# 1. This file: ConfigMap (run.yaml) + LlamaStackDistribution. Safe to commit.
+# 2. llamastack-api-key-secret.yaml: Secret with VLLM token. Create once via CLI or apply
+#    (do not commit real tokens). See that file for: oc create token ... && oc create secret ...
+#
+# Apply: oc apply -f deploy/rhoai/copilot-llama-stack.yaml -n anemo-rhoai
+#        (Create the secret first; see llamastack-api-key-secret.yaml.)
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: copilot-llama-stack-config
+  namespace: anemo-rhoai
+data:
+  run.yaml: |
+    version: '1'
+    image_name: "rh-dev"
+    apis:
+      - inference
+    providers:
+      inference:
+        - provider_id: vllm-inference
+          provider_type: remote::vllm
+          config:
+            url: ${env.VLLM_URL}
+            api_token: ${env.VLLM_API_TOKEN}
+            model: ${env.INFERENCE_MODEL}
+            tls_verify: ${env.VLLM_TLS_VERIFY}
+
+    storage:
+      backends:
+        local-kv-store:
+          type: kv_sqlite
+          db_path: /opt/app-root/src/.llama/distributions/rh/metadata.db
+        local-sql-store:
+          type: sql_sqlite
+          db_path: /opt/app-root/src/.llama/distributions/rh/conversations.db
+      stores:
+        metadata:
+          backend: local-kv-store
+          namespace: default
+        conversations:
+          backend: local-sql-store
+          namespace: default
+          table_name: conversations
+        inference:
+          backend: local-sql-store
+          namespace: default
+          table_name: inference
+      kv_store_provider_id: local-kv-store
+---
+apiVersion: llamastack.io/v1alpha1
+kind: LlamaStackDistribution
+metadata:
+  name: copilot-llama-stack
+  namespace: anemo-rhoai
+spec:
+  replicas: 1
+  server:
+    distribution:
+      name: "rh-dev"
+    userConfig:
+      configMapName: copilot-llama-stack-config
+    containerSpec:
+      name: llama-stack
+      port: 8321
+      resources:
+        limits:
+          cpu: 500m
+          memory: 512Mi
+        requests:
+          cpu: 100m
+          memory: 256Mi
+      # Env below is injected into the LlamaStack container by the operator. run.yaml in the
+      # ConfigMap uses ${env.VAR_NAME} — at startup Llama Stack resolves those from this env.
+      env:
+        - name: INFERENCE_MODEL
+          value: "vllm-inference/redhataillama-31-8b-instruct"
+        # Predictor uses HTTPS on 8443 (see: oc get svc -n anemo-rhoai | grep predictor).
+        # If you get APIConnectionError, ensure VLLM_TLS_VERIFY is "false"; optionally uncomment SSL_CERT_FILE below.
+        - name: VLLM_URL
+          value: "https://redhataillama-31-8b-instruct-predictor.anemo-rhoai.svc.cluster.local:8443/v1"
+        - name: VLLM_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: copilot-llama-stack-api-key
+              key: api_key
+        - name: VLLM_TLS_VERIFY
+          value: "false"
+        # If APIConnectionError persists with https://...:8443, try uncommenting to trust cluster CA:
+        # - name: SSL_CERT_FILE
+        #   value: "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"

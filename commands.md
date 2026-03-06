@@ -65,7 +65,8 @@ cd NeMo-Microservices/deploy/nemo-infra
 helm dependency update
 
 # Install infrastructure (namespace should already exist)
-helm install nemo-infra . -n $NAMESPACE --create-namespace --wait --timeout 30m
+# Helm 4: use --server-side=false to avoid "metadata.managedFields must be nil" with SSA
+helm install nemo-infra . -n $NAMESPACE --create-namespace --wait --timeout 30m --server-side=false
 ```
 
 **Expected Components:**
@@ -301,6 +302,24 @@ helm install nemo-instances . -n $NAMESPACE \
 
 **GPU taints:** The chart's `values.yaml` includes tolerations for `g5-gpu`, `g6e-gpu`, `nvidia.com/gpu`, and `node-role.kubernetes.io/master` for all GPU workloads (NIMCache, NIMPipeline, Customizer). A fresh install works on clusters that use either g5-gpu or g6e-gpu (and master) taints—**no separate patch commands are needed** after install.
 
+### 1b. Upgrading nemo-instances
+
+When upgrading (e.g. after a chart fix or config change), use **client-side apply** to avoid conflicts with the NIM Operator on NIMPipeline `.spec.services` (Helm 4 uses server-side apply by default, which conflicts with the operator's field manager). Always pass the same options you used at install (e.g. `llamastack.enabled`) so the release state stays correct.
+
+```bash
+cd NeMo-Microservices/deploy/nemo-instances
+helm dependency update
+
+# Upgrade without LlamaStack (use same flags as your install)
+helm upgrade nemo-instances . -n $NAMESPACE \
+  --set namespace.name=$NAMESPACE \
+  --set llamastack.enabled=false \
+  --reuse-values \
+  --server-side=false
+```
+
+If you use LlamaStack, use `--set llamastack.enabled=true` and the LlamaStack-related `--set` flags instead of `llamastack.enabled=false`.
+
 ### 2. Wait for Services to Start (Optional)
 
 ```bash
@@ -327,6 +346,73 @@ oc get nimcache,nimpipeline -n $NAMESPACE
 oc get svc nv-rerankqa-1b-v2 -n $NAMESPACE
 oc get pods -n $NAMESPACE | grep rerankqa
 ```
+
+### 3a. Recreate meta-llama 3.1 1b pods (NIMCache + NIMPipeline)
+
+The **meta-llama 3.1 1b** chat model is served by a **NIMCache** (`meta-llama3-1b-instruct`) and a **NIMPipeline** (`llama3-1b-pipeline`). If you deleted only the **pods**, the NIM Operator will recreate them automatically (wait a minute and check `oc get pods -n $NAMESPACE | grep meta-llama`). If you deleted the **NIMCache and/or NIMPipeline** custom resources, recreate them as follows.
+
+**Option A – Re-apply only the meta-llama 3.1 1b resources (no full upgrade):**
+
+```bash
+cd NeMo-Microservices/deploy/nemo-instances
+
+# Render and apply only NIMCache + NIMPipeline for the 1b chat model
+helm template nemo-instances . -n $NAMESPACE \
+  --set namespace.name=$NAMESPACE \
+  -s templates/nimcache.yaml \
+  -s templates/nimpipeline.yaml | oc apply -n $NAMESPACE -f -
+```
+
+**Option B – Full Helm upgrade (recreates all chart resources, including meta-llama 3.1 1b):**
+
+```bash
+cd NeMo-Microservices/deploy/nemo-instances
+helm dependency update
+helm upgrade nemo-instances . -n $NAMESPACE \
+  --set namespace.name=$NAMESPACE \
+  --set llamastack.enabled=false \
+  --reuse-values \
+  --server-side=false
+```
+
+After applying, the NIM Operator will reconcile and create the cache and inference pods. Check status:
+
+```bash
+oc get nimcache,nimpipeline -n $NAMESPACE
+oc get pods -n $NAMESPACE | grep -E "meta-llama|llama3-1b"
+```
+
+### 3b. NIMCache "No space left on device" / multiple meta-llama pods
+
+If the NIM cache job fails with **I/O error No space left on device (os error 28)** or **Error creating symlink**, the cache PVC is full. The model puller downloads multiple GPU profiles (h100, l40s, h200, fp8, bf16, etc.), and the default 50Gi PVC can fill up, causing the job to fail. The NIM Operator then retries, so you see **multiple meta-llama cache pods** (each retry creates a new pod).
+
+**Fix:**
+
+1. **Use a larger PVC** – The chart default for the chat NIMCache is now 100Gi. If you already installed with 50Gi, either:
+   - **Replace the PVC** (loses cache; one-time re-download):
+     ```bash
+     # Delete NIMCache so the operator stops retrying
+     oc delete nimcache meta-llama3-1b-instruct -n $NAMESPACE
+     # PVC name is <NIMCache-name>-pvc when the operator creates it
+     NIMCACHE_PVC="meta-llama3-1b-instruct-pvc"
+     oc delete pvc $NIMCACHE_PVC -n $NAMESPACE --ignore-not-found
+     # If that PVC does not exist, list all PVCs and delete the one used by the cache (e.g. 50Gi):
+     #   oc get pvc -n $NAMESPACE
+     # Or get PVC from a cache pod: oc get pod -n $NAMESPACE -l app.kubernetes.io/name=meta-llama3-1b-instruct -o jsonpath='{.items[0].spec.volumes[?(@.persistentVolumeClaim)].persistentVolumeClaim.claimName}'
+     # Upgrade with larger size, then re-apply NIMCache (see 3a Option A or B)
+     helm upgrade nemo-instances . -n $NAMESPACE --set namespace.name=$NAMESPACE --set nimCache.pvc.size=100Gi --set llamastack.enabled=false --reuse-values --server-side=false
+     ```
+   - Or **expand the PVC** if your StorageClass supports `allowVolumeExpansion: true`:
+     ```bash
+     NIMCACHE_PVC="meta-llama3-1b-instruct-pvc"
+     kubectl patch pvc $NIMCACHE_PVC -n $NAMESPACE -p '{"spec":{"resources":{"requests":{"storage":"100Gi"}}}}'
+     ```
+2. **Stop the retry loop** – Delete the NIMCache CR so no new cache pods are created until you’ve freed space or resized:
+   ```bash
+   oc delete nimcache meta-llama3-1b-instruct -n $NAMESPACE
+   ```
+
+**Why is the PVC list empty?** If you already deleted the NIMCache, the NIM Operator deletes the PVC it created (when `spec.storage.pvc.create: true`), so the PVC may be gone. Use the default name **`meta-llama3-1b-instruct-pvc`** when creating/expanding. To find the PVC from a running cache pod: `oc get pod -n $NAMESPACE -l app.kubernetes.io/name=meta-llama3-1b-instruct -o jsonpath='{.items[0].spec.volumes[?(@.persistentVolumeClaim)].persistentVolumeClaim.claimName}'`.
 
 ### 4. Deploy InferenceService Manually
 
@@ -512,6 +598,34 @@ oc get inferenceservice <inferenceservice-name> -n $NAMESPACE -o jsonpath='{.sta
 # Output: https://my-model-my-namespace.apps.my-cluster.example.com
 ```
 
+### 3a. Using your own deployed model (e.g. RedHatAI/Llama-3.1-8B-Instruct)
+
+If you deployed a model via the RHOAI dashboard (e.g. **RedHatAI/Llama-3.1-8B-Instruct**), it is exposed as a **KServe InferenceService**. Use that InferenceService name everywhere (not the model id).
+
+**1) Find your InferenceService name**
+```bash
+oc get inferenceservice -n $NAMESPACE
+# Use the NAME column (e.g. llama-31-8b-instruct or similar — RHOAI may sanitize the model name)
+export INFERENCESERVICE_NAME=<name-from-above>
+```
+
+**2) Use it in LlamaStack / nemo-instances**
+- Set `llamastack.inferenceServiceName` to that name when installing or upgrading:
+  ```bash
+  helm upgrade nemo-instances . -n $NAMESPACE --set namespace.name=$NAMESPACE \
+    --set llamastack.enabled=true --set llamastack.inferenceServiceName=$INFERENCESERVICE_NAME --reuse-values
+  ```
+- Optionally set the model id for LlamaStack: `--set llamastack.inferenceModel=RedHatAI/Llama-3.1-8B-Instruct` (in `values.yaml`: `llamastack.inferenceModel: "RedHatAI/Llama-3.1-8B-Instruct"`).
+
+**3) Use it in demos (RAG, LLM-as-a-Judge, etc.)**
+In the demo’s `env.donotcommit` set:
+```bash
+NIM_MODEL_SERVING_SERVICE=<your-inferenceservice-name>   # same as INFERENCESERVICE_NAME
+NIM_MODEL_SERVING_MODEL=RedHatAI/Llama-3.1-8B-Instruct
+NIM_MODEL_SERVING_URL_EXTERNAL=$(oc get inferenceservice $INFERENCESERVICE_NAME -n $NAMESPACE -o jsonpath='{.status.url}')
+NIM_SERVICE_ACCOUNT_TOKEN=$(oc create token ${INFERENCESERVICE_NAME}-sa -n $NAMESPACE --duration=8760h)
+```
+
 ### 3. Find Service Names (Optional)
 ```bash
 # Find Chat NIM service (KServe InferenceService)
@@ -561,21 +675,27 @@ oc get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints | grep -E
 **If GPU taints exist, apply GPU tolerations to Workbench:**
 
 ```bash
-# Patch Notebook/Workbench CR to add GPU tolerations (g5-gpu, g6e-gpu, nvidia.com/gpu, master)
-oc patch notebook <notebook-name> -n $NAMESPACE --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}}'
-
-# Example (replace with your actual notebook name and namespace):
-# oc patch notebook anemo-rhoai-wb -n anemo-rhoai --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}}'
-
-# Find your notebook name:
+# 1) Find your notebook name and set NAMESPACE (e.g. anemo-rhoai)
+export NAMESPACE=anemo-rhoai
 oc get notebook -n $NAMESPACE
 
-# Delete the pending pod to trigger recreation with new tolerations
-oc delete pod <pod-name-pending> -n $NAMESPACE
+# 2) Patch the Notebook CR (replace <notebook-name> with the actual name from above)
+oc patch notebook <notebook-name> -n $NAMESPACE --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g5-small-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}}'
 
-# Verify the pod is scheduled and running
-oc get pod <pod-name> -n $NAMESPACE -o wide
+# 3) Verify the patch is on the CR (you should see the tolerations list)
+oc get notebook <notebook-name> -n $NAMESPACE -o yaml | grep -A 20 "tolerations:"
+
+# 4) Delete the pending Workbench pod so the controller recreates it with the new tolerations
+#    (Patching the CR does not change the existing pod; only a new pod gets the tolerations.)
+POD=$(oc get pods -n $NAMESPACE -l app=jupyter-notebook -o jsonpath='{.items[0].metadata.name}')
+oc delete pod $POD -n $NAMESPACE
+
+# 5) Wait for the new pod and verify it is scheduled and running
+oc get pods -n $NAMESPACE -l app=jupyter-notebook -w
+# Or: oc get pod <new-pod-name> -n $NAMESPACE -o wide
 ```
+
+**If nothing changed after the patch:** The patch only affects the *next* pod. You must delete the existing (pending) pod so the controller creates a new one from the updated spec. If the new pod is still Pending, run `oc describe pod <pod-name> -n $NAMESPACE` and check Events: if you see "Insufficient memory/cpu/nvidia.com/gpu", reduce the Workbench size or add capacity; if you still see "untolerated taint", add the missing taint key to the tolerations list above.
 
 **For more details, see [GPU Taints and Tolerations](#gpu-taints-and-tolerations) section.**
 
@@ -772,20 +892,21 @@ oc get pod <pod-name-new> -n $NAMESPACE -o wide
 For Notebook or Workbench resources that are pending due to missing GPU tolerations:
 
 ```bash
-# Patch Notebook CR to add GPU tolerations (g5-gpu, g6e-gpu, nvidia.com/gpu, master)
-oc patch notebook <notebook-name> -n $NAMESPACE --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}}'
+# 1) Patch the Notebook CR (replace <notebook-name> and $NAMESPACE)
+oc patch notebook <notebook-name> -n $NAMESPACE --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g5-small-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}}'
 
-# Example (replace with your actual notebook name and namespace):
-# oc patch notebook my-notebook -n my-namespace --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}}'
+# 2) Verify patch is on the CR
+oc get notebook <notebook-name> -n $NAMESPACE -o yaml | grep -A 20 "tolerations:"
 
-# Delete the pending pod to trigger recreation with new tolerations
-oc delete pod <pod-name-pending> -n $NAMESPACE
+# 3) Delete the pending pod so a new pod is created with the new tolerations
+POD=$(oc get pods -n $NAMESPACE -l app=jupyter-notebook -o jsonpath='{.items[0].metadata.name}')
+oc delete pod $POD -n $NAMESPACE
 
-# Verify the pod is scheduled and running
-oc get pod <pod-name> -n $NAMESPACE -o wide
+# 4) Verify the new pod is scheduled and running
+oc get pods -n $NAMESPACE -l app=jupyter-notebook -o wide
 ```
 
-**Note**: If your pod shows "Pending" status with events mentioning "untolerated taint", you need to add the missing tolerations to the Notebook resource.
+**Nothing changed after patching?** The patch updates the Notebook CR’s pod template; the *existing* pod is unchanged. You must delete the pending pod so the controller creates a new one with the tolerations. If the new pod stays Pending, run `oc describe pod <pod-name> -n $NAMESPACE` and check Events: "Insufficient memory/cpu/nvidia.com/gpu" means resource capacity; "untolerated taint" means add that taint to the tolerations list.
 
 ## Troubleshooting
 
@@ -856,6 +977,19 @@ This indicates that the service account name was not properly set. **Solution**:
 
 **Note**: The RBAC template automatically constructs the service account name from `inferenceServiceName`. You should not need to set `llamastack.serviceAccountName` manually unless you're using a custom service account name.
 
+### Workbench/Jupyter link does not open (dashboard "Open" link)
+
+If the RHOAI dashboard link to open the Workbench/Notebook worked yesterday but not today, the **Workbench pod is likely not Running** (e.g. still **Pending** due to GPU taints or not recreated after a toleration patch). The dashboard link points at the Workbench route; if the pod never becomes Ready, the link will hang or fail.
+
+**Fix:**
+1. **Check Workbench pod status:** `oc get pods -n $NAMESPACE -l app=jupyter-notebook`
+2. If status is **Pending**, apply [GPU tolerations to the Notebook CR](#manually-deploy-workbench-and-apply-tolerations) and **delete the pending pod** so a new one is created with the new tolerations. The dashboard link will work again once the new pod is Running.
+3. **Alternative (no dashboard):** If the pod is Running, you can open Jupyter via port-forward:
+   ```bash
+   oc port-forward -n $NAMESPACE svc/jupyter-service 8888:8888
+   ```
+   Then open **http://localhost:8888** in your browser (token: `token`).
+
 ### Pod Stuck in Pending State (Missing GPU Tolerations)
 
 If a pod is stuck in `Pending` state with events showing "untolerated taint":
@@ -867,7 +1001,7 @@ If a pod is stuck in `Pending` state with events showing "untolerated taint":
      ```bash
      # Upgrade to refresh Customizer CR tolerations
      cd NeMo-Microservices/deploy/nemo-instances
-     helm upgrade nemo-instances . -n $NAMESPACE --set namespace.name=$NAMESPACE --set llamastack.enabled=false --reuse-values
+     helm upgrade nemo-instances . -n $NAMESPACE --set namespace.name=$NAMESPACE --set llamastack.enabled=false --reuse-values --server-side=false
      
      # Patch existing NemoTrainingJobs (if any are pending):
      for JOB in $(oc get nemotrainingjob -n $NAMESPACE -o jsonpath='{.items[*].metadata.name}'); do
@@ -888,8 +1022,9 @@ oc describe pod <pod-name> -n $NAMESPACE | grep -A 10 "Events:"
 # Check what resource owns the pod (Notebook, InferenceService, NIMCache, etc.)
 oc get pod <pod-name> -n $NAMESPACE -o jsonpath='{.metadata.ownerReferences[*].kind}'
 
-# For Notebook resources (use g5-gpu, g6e-gpu, nvidia.com/gpu, master for common OpenShift GPU nodes):
-oc patch notebook <notebook-name> -n $NAMESPACE --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}}'
+# For Notebook resources (g5-gpu, g5-small-gpu, g6e-gpu, nvidia.com/gpu, master for common OpenShift GPU nodes):
+oc patch notebook <notebook-name> -n $NAMESPACE --type='merge' -p='{"spec":{"template":{"spec":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g5-small-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}}'
+# Then delete the pending pod (patch only affects new pods): oc delete pod <pod-name> -n $NAMESPACE
 
 # For InferenceService:
 oc patch inferenceservice <inferenceservice-name> -n $NAMESPACE --type='merge' -p='{"spec":{"predictor":{"tolerations":[{"key":"g5-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"g6e-gpu","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}'
@@ -912,7 +1047,56 @@ oc delete pod <pod-name> -n $NAMESPACE
 oc get pod <pod-name> -n $NAMESPACE -o wide
 ```
 
-### Verify Service Account Token
+### NIMPipeline / NIMCache pods still Pending after adding g5-small-gpu
+
+If you updated `values.yaml` with the `g5-small-gpu` toleration but **embedding** (`nv-embedqa-1b-v2`) or **retriever** (`nv-rerankqa-1b-v2`) pods stay Pending:
+
+1. **Apply the change to the cluster** – Upgrade so the NIMPipeline CRs get the new tolerations, then make the operator recreate pods:
+
+```bash
+export NAMESPACE=anemo-rhoai   # or your namespace
+
+# Update CRs from the chart (if you haven't already)
+cd /path/to/NeMo-Microservices/deploy/nemo-instances
+helm upgrade nemo-instances . -n $NAMESPACE \
+  --set namespace.name=$NAMESPACE \
+  --set llamastack.enabled=false \
+  --reuse-values \
+  --server-side=false
+```
+
+2. **Patch the NIMPipeline CRs directly** (in case the operator or Helm didn’t update them):
+
+```bash
+# Add g5-small-gpu toleration to embedding pipeline
+oc patch nimpipeline embedding-1b-v2-pipeline -n $NAMESPACE --type=json -p='[
+  {"op":"add","path":"/spec/services/0/spec/tolerations/-","value":{"key":"g5-small-gpu","operator":"Equal","value":"true","effect":"NoSchedule"}}
+]'
+
+# Add g5-small-gpu toleration to retriever pipeline
+oc patch nimpipeline retriever-rerankqa-pipeline -n $NAMESPACE --type=json -p='[
+  {"op":"add","path":"/spec/services/0/spec/tolerations/-","value":{"key":"g5-small-gpu","operator":"Equal","value":"true","effect":"NoSchedule"}}
+]'
+```
+
+3. **Force new pods** – Restart the deployments so new pods are created with the updated spec:
+
+```bash
+oc rollout restart deployment/nv-embedqa-1b-v2 -n $NAMESPACE
+oc rollout restart deployment/nv-rerankqa-1b-v2 -n $NAMESPACE
+```
+
+4. **If they’re still Pending** – The 4 nodes with taint `g5-small-gpu: true` may not have `nvidia.com/gpu` capacity. Check:
+
+```bash
+# Nodes with the taint
+oc get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints,GPU:.status.allocatable.nvidia\\.com/gpu | grep g5-small
+
+# All nodes GPU capacity
+oc get nodes -o custom-columns=NAME:.metadata.name,GPU:.status.allocatable.nvidia\\.com/gpu
+```
+
+If those 4 nodes show no GPU or 0, the pods need to run on other GPU nodes (and you’d need to remove the taint or add GPU capacity there).
 ```bash
 # Check if token is set in env.donotcommit
 grep NIM_SERVICE_ACCOUNT_TOKEN demos/*/env.donotcommit
@@ -1130,6 +1314,56 @@ oc get destinationrule -n $NAMESPACE | grep evaluator
 ```
 
 **Note**: This is automatically applied when deploying with Helm if `evaluator.destinationRule.enabled: true` is set in `values.yaml` (which is the default).
+
+### Evaluator init container (evaluator-db-migration) CrashLoopBackOff
+
+The evaluator pod has an init container `evaluator-db-migration` that runs Alembic DB migrations. It loads the same config as the main container and requires **EVALUATOR_IMAGE**. The NIM Operator may only inject `spec.env` into the main container, so the init container can fail with `Environment variable EVALUATOR_IMAGE is not set`.
+
+**Confirm the error:**
+```bash
+oc logs -n $NAMESPACE deployment/nemoevaluator-sample -c evaluator-db-migration --tail=50
+```
+
+**Workaround – patch the Deployment to add EVALUATOR_IMAGE to the init container:**  
+Use the same image as in your chart (e.g. `nvcr.io/nvidia/nemo-microservices/evaluator:25.12`). If the NIM Operator reconciles the deployment later, it may overwrite this; re-apply the patch if the init container starts failing again.
+
+**Option 1 – patch from a file (avoids shell quoting issues):**
+```bash
+export NAMESPACE=anemo-rhoai
+export EVALUATOR_IMAGE="nvcr.io/nvidia/nemo-microservices/evaluator:25.12"
+
+# Write the JSON patch to a file (no variable expansion in the path)
+cat <<EOF > /tmp/evaluator-init-env-patch.json
+[
+  {"op": "add", "path": "/spec/template/spec/initContainers/0/env", "value": [{"name": "EVALUATOR_IMAGE", "value": "$EVALUATOR_IMAGE"}]}
+]
+EOF
+
+oc patch deployment nemoevaluator-sample -n $NAMESPACE --type=json --patch-file=/tmp/evaluator-init-env-patch.json
+```
+
+If that fails with "path already exists" (init container already has `env`), use this patch instead to **append** to the existing env:
+```bash
+cat <<EOF > /tmp/evaluator-init-env-patch.json
+[
+  {"op": "add", "path": "/spec/template/spec/initContainers/0/env/-", "value": {"name": "EVALUATOR_IMAGE", "value": "$EVALUATOR_IMAGE"}}
+]
+EOF
+oc patch deployment nemoevaluator-sample -n $NAMESPACE --type=json --patch-file=/tmp/evaluator-init-env-patch.json
+```
+
+**Option 2 – use `kubectl set env` on the deployment:**  
+Some clusters support setting env on a specific container by name:
+```bash
+kubectl set env deployment/nemoevaluator-sample -n $NAMESPACE EVALUATOR_IMAGE=nvcr.io/nvidia/nemo-microservices/evaluator:25.12 --containers=evaluator-db-migration
+```
+If `--containers=evaluator-db-migration` is not supported, use Option 1.
+
+If the patch fails (e.g. path already exists or wrong index), get the init container index and current env:
+```bash
+oc get deployment nemoevaluator-sample -n $NAMESPACE -o jsonpath='{.spec.template.spec.initContainers[*].name}'
+# Then patch the correct index (replace 0 with the index of evaluator-db-migration)
+```
 
 ### Clean Up PVCs (Optional)
 

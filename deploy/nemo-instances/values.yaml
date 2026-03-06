@@ -10,7 +10,7 @@ namespace:
 
 # Component installation flags
 install:
-  nemoOperator: true
+  nemoOperator: false  # Install separately via helm fetch (see Chart.yaml comment); set true only for reference
   nimOperator: true
 
 # Storage configuration
@@ -35,20 +35,20 @@ postgresqlSecrets:
     password: "guardrailpass"  # Fallback if nemo-infra-guardrail-postgresql secret not found
 
 # ===== NemoCustomizer Configuration =====
-# Image: nvcr.io/nvidia/nemo-microservices/customizer-api:25.08 (matches latest samples)
+# Image: nvcr.io/nvidia/nemo-microservices/customizer-api:25.12
 customizer:
   enabled: true
   name: nemocustomizer-sample
   image:
     repository: nvcr.io/nvidia/nemo-microservices/customizer-api
-    tag: "25.08"
+    tag: "25.12"
     pullPolicy: IfNotPresent
   trainingImage:
     repository: nvcr.io/nvidia/nemo-microservices/customizer
-    tag: "25.08"
+    tag: "25.12"
   datastoreToolsImage:
     repository: nvcr.io/nvidia/nemo-microservices/nds-v2-huggingface-cli
-    tag: "25.08"
+    tag: "25.12"
   scheduler:
     type: "volcano"
   wandb:
@@ -118,13 +118,13 @@ customizer:
       nvidia.com/gpu: "1"
 
 # ===== NemoDatastore Configuration =====
-# Image: nvcr.io/nvidia/nemo-microservices/datastore:25.08 (exact from quickstart)
+# Image: nvcr.io/nvidia/nemo-microservices/datastore:25.12
 datastore:
   enabled: true
   name: nemodatastore-sample
   image:
     repository: nvcr.io/nvidia/nemo-microservices/datastore
-    tag: "25.08"
+    tag: "25.12"
     pullPolicy: IfNotPresent
   database:
     # host will be templated in the template file
@@ -163,13 +163,13 @@ datastore:
   lfsJwtSecret: "VjNwcWQxSlViMnR5YkRSbFVuSjZlVUpTY0d0R2IxSldUM0UyZWpsUGRuUQ=="  # DEV DEFAULT - override for production
 
 # ===== NemoEntitystore Configuration =====
-# Image: nvcr.io/nvidia/nemo-microservices/entity-store:25.08 (exact from quickstart)
+# Image: nvcr.io/nvidia/nemo-microservices/entity-store:25.12
 entitystore:
   enabled: true
   name: nemoentitystore-sample
   image:
     repository: nvcr.io/nvidia/nemo-microservices/entity-store
-    tag: "25.08"
+    tag: "25.12"
     pullPolicy: IfNotPresent
   database:
     # host will be templated in the template file
@@ -180,13 +180,13 @@ entitystore:
     passwordKey: password
 
 # ===== NemoEvaluator Configuration =====
-# Image: nvcr.io/nvidia/nemo-microservices/evaluator:25.08 (upgraded from 25.06)
+# Image: nvcr.io/nvidia/nemo-microservices/evaluator:25.12
 evaluator:
   enabled: true
   name: nemoevaluator-sample
   image:
     repository: nvcr.io/nvidia/nemo-microservices/evaluator
-    tag: "25.08"
+    tag: "25.12"
     pullPolicy: IfNotPresent
   evaluationImages:
     bigcodeEvalHarness: "nvcr.io/nvidia/nemo-microservices/eval-tool-benchmark-bigcode:0.12.21"
@@ -202,7 +202,8 @@ evaluator:
     # endpoint will be templated in the template file
     serviceAccount: argo-workflows-executor
   vectorDB:
-    # endpoint will be templated in the template file
+    # endpoint will be templated (host from evaluator.vectorDB.host, same namespace)
+    host: "nemo-infra-evaluator-milvus"
   database:
     # host will be templated in the template file
     port: 5432
@@ -235,16 +236,18 @@ evaluator:
     namespace: ""
     # Path (e.g., "/v1" for KServe InferenceService)
     path: ""
+    # Port for NIM/KServe service (80 for KServe InferenceService, 8000 for NIMPipeline)
+    port: "80"
   replicas: 1
 
 # ===== NemoGuardrail Configuration =====
-# Image: nvcr.io/nvidia/nemo-microservices/guardrails:25.08 (exact from quickstart)
+# Image: nvcr.io/nvidia/nemo-microservices/guardrails:25.12
 guardrail:
   enabled: true
   name: nemoguardrails-sample
   image:
     repository: nvcr.io/nvidia/nemo-microservices/guardrails
-    tag: "25.08"
+    tag: "25.12"
     pullPolicy: IfNotPresent
   database:
     # host will be templated in the template file
@@ -277,6 +280,9 @@ guardrail:
 # ===== NIMCache Configuration (Chat Model) =====
 # Model: nvcr.io/nim/meta/llama-3.2-1b-instruct:1.8.3 (chat model for inference)
 # Restored for better integration with NeMo Microservices
+# PVC size: model puller caches multiple GPU profiles (h100, l40s, h200, fp8, bf16, etc.).
+# 50Gi often fills up -> "No space left on device" and repeated cache job failures (multiple pods).
+# Use at least 100Gi if you see those errors.
 nimCache:
   enabled: true
   name: meta-llama3-1b-instruct
@@ -291,9 +297,13 @@ nimCache:
   groupID: 1000790000
   pvc:
     create: true
-    size: "50Gi"
+    size: "100Gi"
   tolerations:
     - key: "g5-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "g5-small-gpu"
       operator: "Equal"
       value: "true"
       effect: "NoSchedule"
@@ -331,6 +341,10 @@ nimPipeline:
       operator: "Equal"
       value: "true"
       effect: "NoSchedule"
+    - key: "g5-small-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
     - key: "g6e-gpu"
       operator: "Equal"
       value: "true"
@@ -344,10 +358,9 @@ nimPipeline:
 
 # ===== NIMCache Embedding Configuration =====
 # Model: nvcr.io/nim/nvidia/llama-3.2-nv-embedqa-1b-v2:1.3.1 (embedding model for RAG)
-# Using official model from: deploy-on-openshift/config/samples/nim/pipelines/rag/nimcache-embedding.yaml
-# This model supports NIMCache properly (has model_manifest.yaml)
+# Disable when GPU is limited; re-enable for RAG demos when you have allocatable GPUs.
 nimCacheEmbedding:
-  enabled: true
+  enabled: false
   name: nv-embedqa-1b-v2
   modelPuller: nvcr.io/nim/nvidia/llama-3.2-nv-embedqa-1b-v2:1.3.1
   engine: tensorrt  # Embedding models use tensorrt, not tensorrt_llm
@@ -366,6 +379,10 @@ nimCacheEmbedding:
       operator: "Equal"
       value: "true"
       effect: "NoSchedule"
+    - key: "g5-small-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
     - key: "g6e-gpu"
       operator: "Equal"
       value: "true"
@@ -378,10 +395,9 @@ nimCacheEmbedding:
       effect: "NoSchedule"
 
 # ===== NIMPipeline Embedding Configuration =====
-# Model: nvcr.io/nim/nvidia/llama-3.2-nv-embedqa-1b-v2:1.3.1 (embedding model for RAG)
-# Using official model that supports NIMCache
+# Disable when GPU is limited; re-enable for RAG demos when you have allocatable GPUs.
 nimPipelineEmbedding:
-  enabled: true
+  enabled: false
   name: embedding-1b-v2-pipeline
   serviceName: nv-embedqa-1b-v2
   image:
@@ -400,6 +416,10 @@ nimPipelineEmbedding:
       operator: "Equal"
       value: "true"
       effect: "NoSchedule"
+    - key: "g5-small-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
     - key: "g6e-gpu"
       operator: "Equal"
       value: "true"
@@ -412,10 +432,9 @@ nimPipelineEmbedding:
       effect: "NoSchedule"
 
 # ===== NIMCache Retriever Configuration =====
-# Model: nvcr.io/nim/nvidia/llama-3.2-nv-rerankqa-1b-v2 (reranking model for RAG)
-# NeMo Retriever for text reranking to improve RAG retrieval quality
+# Disable when GPU is limited; re-enable for RAG demos when you have allocatable GPUs.
 nimCacheRetriever:
-  enabled: true
+  enabled: false
   name: nv-rerankqa-1b-v2
   modelPuller: nvcr.io/nim/nvidia/llama-3.2-nv-rerankqa-1b-v2:1.3.1
   engine: tensorrt  # Retriever models use tensorrt, not tensorrt_llm
@@ -434,6 +453,10 @@ nimCacheRetriever:
       operator: "Equal"
       value: "true"
       effect: "NoSchedule"
+    - key: "g5-small-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
     - key: "g6e-gpu"
       operator: "Equal"
       value: "true"
@@ -446,10 +469,9 @@ nimCacheRetriever:
       effect: "NoSchedule"
 
 # ===== NIMPipeline Retriever Configuration =====
-# Model: nvcr.io/nim/nvidia/llama-3.2-nv-rerankqa-1b-v2 (reranking model for RAG)
-# NeMo Retriever service for text reranking
+# Disable when GPU is limited; re-enable for RAG demos when you have allocatable GPUs.
 nimPipelineRetriever:
-  enabled: true
+  enabled: false
   name: retriever-rerankqa-pipeline
   serviceName: nv-rerankqa-1b-v2
   image:
@@ -465,6 +487,10 @@ nimPipelineRetriever:
       gpu: 1
   tolerations:
     - key: "g5-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "g5-small-gpu"
       operator: "Equal"
       value: "true"
       effect: "NoSchedule"
@@ -557,7 +583,13 @@ llamastack:
       memory: "1Gi"
       cpu: "1"
 
-# ===== NeMo Operator Subchart =====
+# ===== NeMo Operator (install separately) =====
+# NeMo Operator is not a Helm dependency. Install before this chart using VERSION=25.6.0 (per NIM Operator docs):
+#   export NAMESPACE=anemo-rhoai NGC_API_KEY='your-key' VERSION=25.6.0
+#   helm fetch "https://helm.ngc.nvidia.com/nvidia/nemo-microservices/charts/nemo-operator-${VERSION}.tgz" --username='$oauthtoken' --password="$NGC_API_KEY"
+#   helm upgrade --install nemo-operator "nemo-operator-${VERSION}.tgz" -n $NAMESPACE --set 'imagePullSecrets[0].name=ngc-secret' --set controllerManager.manager.scheduler=volcano
+# If fetch returns 404, add the repo with auth and install from repo: helm repo add nmp https://helm.ngc.nvidia.com/nvidia/nemo-microservices --username='$oauthtoken' --password="$NGC_API_KEY" && helm repo update && helm search repo nmp
+# The section below is not used by this chart; kept for reference.
 nemo-operator:
   # NeMo Operator chart configuration
   # Following quickstart Step 4 (lines 114-133):
@@ -586,26 +618,13 @@ nemo-operator:
 
 # ===== NIM Operator Subchart =====
 nim-operator:
-  # NIM Operator chart configuration
-  # Following quickstart Step 5 (lines 137-150):
-  # - Uses local OpenShift-specific Helm chart (NOT the official NVIDIA repo chart)
-  # - Image: ghcr.io/nvidia/k8s-nim-operator:release-3.0 (exact from chart values.yaml)
-  # - Resource limits: 512Mi limit, 256Mi request (exact from quickstart lines 143-144)
-  # 
-  # CRITICAL: OpenShift requires the local Helm chart from deploy-on-openshift/deployments/helm/k8s-nim-operator
-  # The official NVIDIA Helm repository chart (nvidia/k8s-nim-operator) is NOT compatible with OpenShift
-  # due to security context and permission differences (quickstart line 150)
-  
-  # Operator resource configuration (exact from quickstart lines 143-144)
+  # NIM Operator 3.0.2 from official NVIDIA Helm repo (https://helm.ngc.nvidia.com/nvidia)
+  # Image defaults to nvcr.io/nvidia/cloud-native/k8s-nim-operator:v3.0.2 from the chart.
+  # OpenShift: can also install via Console (Ecosystem > Software Catalog > NVIDIA NIM Operator).
   operator:
     resources:
       limits:
         memory: 512Mi
       requests:
         memory: 256Mi
-    # Image configuration (exact from chart values.yaml)
-    image:
-      repository: ghcr.io/nvidia/k8s-nim-operator
-      tag: release-3.0
-      pullPolicy: Always
 

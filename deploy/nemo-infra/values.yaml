@@ -409,7 +409,7 @@ volcano:
     # 
     # To include multiple namespaces (e.g., if Volcano already exists in another namespace):
     # Add the namespace names to the values list below:
-    # values: ["arhkp-nemo-helm", "existing-volcano-namespace"]
+    # values: ["anemo-rhoai", "existing-volcano-namespace"]
     # Namespace scoping configuration for Volcano webhooks
     # The Volcano chart automatically adds a default exclusion for {{ .Release.Namespace }} and kube-system
     # Then it appends our custom expressions. In Kubernetes, matchExpressions are AND-ed together.
@@ -424,7 +424,7 @@ volcano:
       - key: kubernetes.io/metadata.name
         operator: In
         values:
-          - arhkp-nemo-helm  # Deployment namespace
+          - anemo-rhoai  # Override with: --set volcano.custom.webhooks_namespace_selector_expressions[0].values[0]=YOUR_NAMESPACE
           # Add additional namespaces here if you want this Volcano installation to watch them:
           # - existing-volcano-namespace
           # - another-namespace

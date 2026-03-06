@@ -18,7 +18,7 @@ spec:
   # OpenTelemetry tracing configuration
   otel:
     enabled: {{ .Values.customizer.otel.enabled }}
-    exporterOtlpEndpoint: http://customizer-otel-opentelemetry-collector.{{ .Values.namespace.name }}.svc.cluster.local:4317
+    exporterOtlpEndpoint: http://nemo-infra-customizer-opentelemetry-collector.{{ .Values.namespace.name }}.svc.cluster.local:4317
   # PostgreSQL database connection configuration
   databaseConfig:
     credentials:
@@ -40,6 +40,13 @@ spec:
     pullPolicy: {{ .Values.customizer.image.pullPolicy }}
     pullSecrets:
       - ngc-secret
+  # Inject NGC API key into the Customizer API pod so it can load NGC targets at startup
+  env:
+    - name: {{ .Values.customizer.ngcAPISecret.key }}
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.customizer.ngcAPISecret.name }}
+          key: {{ .Values.customizer.ngcAPISecret.key }}
   # URL to the NeMo Entity Store microservice
   entitystore:
     endpoint: http://{{ .Values.entitystore.name }}.{{ .Values.namespace.name }}.svc.cluster.local:8000

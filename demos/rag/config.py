@@ -35,7 +35,12 @@ GUARDRAILS_URL = f"http://nemoguardrails-sample.{NMS_NAMESPACE}.svc.cluster.loca
 # Or use the predictor service name for cluster-internal access
 NIM_CHAT_URL = "https://anemo-rhoai-model-anemo-rhoai.apps.ai-dev05.kni.syseng.devcluster.openshift.com"
 NIM_EMBEDDING_URL = f"http://nv-embedqa-1b-v2.{NMS_NAMESPACE}.svc.cluster.local:8000"
-LLAMASTACK_URL = f"http://llamastack.{NMS_NAMESPACE}.svc.cluster.local:8321"  # LlamaStack Server
+# LlamaStack: override via LLAMASTACK_URL for RHOAI (e.g. copilot-llama-stack-service)
+LLAMASTACK_URL = os.getenv("LLAMASTACK_URL", f"http://llamastack.{NMS_NAMESPACE}.svc.cluster.local:8321")
+# Chat model id for LlamaStack (e.g. nvidia/meta/llama-3.2-1b-instruct or vllm-inference/redhataillama-31-8b-instruct)
+LLAMASTACK_CHAT_MODEL = os.getenv("LLAMASTACK_CHAT_MODEL", "nvidia/meta/llama-3.2-1b-instruct")
+# Optional: API key for LlamaStack client. Leave unset for RHOAI copilot-llama-stack (no client auth).
+LLAMASTACK_API_KEY = os.getenv("LLAMASTACK_API_KEY", "")
 
 # Cluster-internal NIM URLs (always use cluster service names)
 # These are used for operations that run inside the cluster

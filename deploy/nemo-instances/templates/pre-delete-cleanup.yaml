@@ -274,7 +274,7 @@ metadata:
 subjects:
 - kind: ServiceAccount
   name: nemo-instances-cleanup
-  namespace: {{ .Values.namespace.name }}
+  namespace: {{ .Values.namespace.name | default .Release.Namespace }}
 roleRef:
   kind: ClusterRole
   name: nemo-instances-cleanup-cluster

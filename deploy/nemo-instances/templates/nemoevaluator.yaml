@@ -29,7 +29,7 @@ spec:
     endpoint: https://nemo-infra-argo-workflows-server.{{ .Values.namespace.name }}.svc.cluster.local:2746
     serviceAccount: {{ .Values.evaluator.argoWorkflows.serviceAccount }}
   vectorDB:
-    endpoint: http://milvus.{{ .Values.namespace.name }}.svc.cluster.local:19530
+    endpoint: http://{{ .Values.evaluator.vectorDB.host | default "nemo-infra-evaluator-milvus" }}.{{ .Values.namespace.name }}.svc.cluster.local:19530
   datastore:
     endpoint: http://{{ .Values.datastore.name }}.{{ .Values.namespace.name }}.svc.cluster.local:8000/v1/hf
   entitystore:
@@ -44,9 +44,12 @@ spec:
       passwordKey: {{ .Values.evaluator.database.passwordKey }}
   otel:
     enabled: {{ .Values.evaluator.otel.enabled }}
-    exporterOtlpEndpoint: http://evaluator-otel-opentelemetry-collector.{{ .Values.namespace.name }}.svc.cluster.local:4317
-{{- if .Values.evaluator.env }}
+    exporterOtlpEndpoint: http://nemo-infra-evaluator-opentelemetry-collector.{{ .Values.namespace.name }}.svc.cluster.local:4317
   env:
+    # Required by evaluator for v2 job steps (must match spec.image)
+    - name: EVALUATOR_IMAGE
+      value: {{ printf "%s:%s" .Values.evaluator.image.repository .Values.evaluator.image.tag | quote }}
+{{- if .Values.evaluator.env }}
 {{- range .Values.evaluator.env }}
     - name: {{ .name }}
       {{- if eq .name "NIM_PROXY_URL" }}
@@ -59,6 +62,7 @@ spec:
       {{- $nimServiceSuffix := "" }}
       {{- $nimNamespace := $.Values.namespace.name }}
       {{- $nimPath := "" }}
+      {{- $nimPort := "80" }}
       {{- if hasKey $.Values.evaluator "nimProxy" }}
         {{- if hasKey $.Values.evaluator.nimProxy "serviceName" }}
           {{- if ne $.Values.evaluator.nimProxy.serviceName "" }}
@@ -80,8 +84,13 @@ spec:
             {{- $nimPath = $.Values.evaluator.nimProxy.path }}
           {{- end }}
         {{- end }}
+        {{- if hasKey $.Values.evaluator.nimProxy "port" }}
+          {{- if ne $.Values.evaluator.nimProxy.port "" }}
+            {{- $nimPort = $.Values.evaluator.nimProxy.port }}
+          {{- end }}
+        {{- end }}
       {{- end }}
-      value: "http://{{ $nimServiceName }}{{ $nimServiceSuffix }}.{{ $nimNamespace }}.svc.cluster.local:8000{{ $nimPath }}"
+      value: "http://{{ $nimServiceName }}{{ $nimServiceSuffix }}.{{ $nimNamespace }}.svc.cluster.local:{{ $nimPort }}{{ $nimPath }}"
       {{- else }}
       value: {{ .value | quote }}
       {{- end }}
