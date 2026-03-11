@@ -10,7 +10,7 @@ namespace:
 
 # Component installation flags
 install:
-  nemoOperator: false  # Install separately via helm fetch (see Chart.yaml comment); set true only for reference
+  nemoOperator: true   
   nimOperator: true
 
 # Storage configuration
@@ -360,7 +360,7 @@ nimPipeline:
 # Model: nvcr.io/nim/nvidia/llama-3.2-nv-embedqa-1b-v2:1.3.1 (embedding model for RAG)
 # Disable when GPU is limited; re-enable for RAG demos when you have allocatable GPUs.
 nimCacheEmbedding:
-  enabled: false
+  enabled: true
   name: nv-embedqa-1b-v2
   modelPuller: nvcr.io/nim/nvidia/llama-3.2-nv-embedqa-1b-v2:1.3.1
   engine: tensorrt  # Embedding models use tensorrt, not tensorrt_llm
@@ -397,7 +397,7 @@ nimCacheEmbedding:
 # ===== NIMPipeline Embedding Configuration =====
 # Disable when GPU is limited; re-enable for RAG demos when you have allocatable GPUs.
 nimPipelineEmbedding:
-  enabled: false
+  enabled: true
   name: embedding-1b-v2-pipeline
   serviceName: nv-embedqa-1b-v2
   image:
@@ -434,7 +434,7 @@ nimPipelineEmbedding:
 # ===== NIMCache Retriever Configuration =====
 # Disable when GPU is limited; re-enable for RAG demos when you have allocatable GPUs.
 nimCacheRetriever:
-  enabled: false
+  enabled: true
   name: nv-rerankqa-1b-v2
   modelPuller: nvcr.io/nim/nvidia/llama-3.2-nv-rerankqa-1b-v2:1.3.1
   engine: tensorrt  # Retriever models use tensorrt, not tensorrt_llm
@@ -471,7 +471,7 @@ nimCacheRetriever:
 # ===== NIMPipeline Retriever Configuration =====
 # Disable when GPU is limited; re-enable for RAG demos when you have allocatable GPUs.
 nimPipelineRetriever:
-  enabled: false
+  enabled: true
   name: retriever-rerankqa-pipeline
   serviceName: nv-rerankqa-1b-v2
   image:

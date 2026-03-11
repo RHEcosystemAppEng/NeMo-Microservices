@@ -339,6 +339,9 @@ oc get pods -n $NAMESPACE | grep -E "datastore|entitystore|customizer|evaluator|
 # Check Custom Resources
 oc get nemodatastore,nemoentitystore,nemocustomizer,nemoevaluator,nemoguardrail -n $NAMESPACE
 
+# If evaluator pod is CrashLoopBackOff with "EVALUATOR_IMAGE is not set" in init container,
+# apply the workaround in Troubleshooting: "Evaluator init container (evaluator-db-migration) CrashLoopBackOff"
+
 # Check NIM services (embedding and retriever)
 oc get nimcache,nimpipeline -n $NAMESPACE
 
@@ -1317,7 +1320,9 @@ oc get destinationrule -n $NAMESPACE | grep evaluator
 
 ### Evaluator init container (evaluator-db-migration) CrashLoopBackOff
 
-The evaluator pod has an init container `evaluator-db-migration` that runs Alembic DB migrations. It loads the same config as the main container and requires **EVALUATOR_IMAGE**. The NIM Operator may only inject `spec.env` into the main container, so the init container can fail with `Environment variable EVALUATOR_IMAGE is not set`.
+The evaluator pod has an init container `evaluator-db-migration` that runs Alembic DB migrations. It loads the same config as the main container and requires **EVALUATOR_IMAGE**. The NEMo Evaluator operator injects `spec.env` from the NemoEvaluator CR into the **main** container only, not into the init container, so the init container can fail with `Environment variable EVALUATOR_IMAGE is not set`.
+
+**Why it worked on older OpenShift / NEMo versions:** Older operator or evaluator image versions either propagated `spec.env` to all containers (including init containers), or the evaluator image did not require `EVALUATOR_IMAGE` at Alembic load time. Newer operator or image behavior changed this, so the workaround below is needed on current versions.
 
 **Confirm the error:**
 ```bash
