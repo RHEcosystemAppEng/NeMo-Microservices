@@ -1,0 +1,629 @@
+# NeMo Samples Helm Chart Values (SAMPLE)
+# Copy this file to values.yaml and replace placeholders with your deployment-specific values.
+# values.yaml is gitignored and must not contain sensitive URLs or credentials in the repo.
+#
+# Following quickstart Step 6 (lines 152-164)
+# Deploys custom resources: NemoCustomizer, NemoDatastore, NemoEntitystore,
+# NemoEvaluator, NemoGuardrail, NIMCache (embedding), NIMPipeline (embedding)
+# Note: Chat models are deployed via RHOAI/OpenShift AI NIM Serving Runtime Model (KServe InferenceService)
+
+# Installation namespace (replace with your OpenShift project/namespace)
+namespace:
+  name: your-namespace
+
+# Component installation flags
+install:
+  nemoOperator: true   
+  nimOperator: true
+
+# Storage configuration
+storage:
+  storageClass: ""  # Empty string uses default storage class
+  volumeAccessMode: ReadWriteOnce
+
+# PostgreSQL Secrets Configuration
+# These passwords are used as fallbacks if infrastructure PostgreSQL secrets cannot be read.
+# The Helm template will automatically read passwords from infrastructure secrets if available.
+# Only override these if infrastructure secrets don't exist or you need different passwords.
+postgresqlSecrets:
+  customizer:
+    password: "CHANGE_ME"  # Fallback if nemo-infra-customizer-postgresql secret not found
+  datastore:
+    password: "CHANGE_ME"  # Fallback if nemo-infra-datastore-postgresql secret not found
+  entitystore:
+    password: "CHANGE_ME"  # Fallback if nemo-infra-entity-store-postgresql secret not found
+  evaluator:
+    password: "CHANGE_ME"  # Fallback if nemo-infra-evaluator-postgresql secret not found
+  guardrail:
+    password: "CHANGE_ME"  # Fallback if nemo-infra-guardrail-postgresql secret not found
+
+# ===== NemoCustomizer Configuration =====
+# Image: nvcr.io/nvidia/nemo-microservices/customizer-api:25.12
+customizer:
+  enabled: true
+  name: nemocustomizer-sample
+  image:
+    repository: nvcr.io/nvidia/nemo-microservices/customizer-api
+    tag: "25.12"
+    pullPolicy: IfNotPresent
+  trainingImage:
+    repository: nvcr.io/nvidia/nemo-microservices/customizer
+    tag: "25.12"
+  datastoreToolsImage:
+    repository: nvcr.io/nvidia/nemo-microservices/nds-v2-huggingface-cli
+    tag: "25.12"
+  scheduler:
+    type: "volcano"
+  wandb:
+    # Note: CRD requires wandb section, so it's always included in the spec
+    # The secret is always created (with empty values by default)
+    # WandB functionality is optional - application should handle empty values gracefully
+    secretName: wandb-secret
+    apiKeyKey: apiKey
+    encryptionKey: encryptionKey
+    # Values for wandb-secret (empty by default, wandb is optional)
+    # For production with WandB, override via --set flags:
+    # --set customizer.wandb.apiKey=<your-api-key> --set customizer.wandb.encryptionKeyValue=<your-encryption-key>
+    apiKey: ""
+    encryptionKeyValue: ""
+  otel:
+    enabled: true
+    # exporterOtlpEndpoint will be templated in the template file
+  database:
+    # host will be templated in the template file
+    port: 5432
+    databaseName: ncsdb
+    user: ncsuser
+    secretName: customizer-pg-existing-secret
+    passwordKey: password
+  modelPVC:
+    create: true
+    name: finetuning-ms-models-pvc
+    size: 100Gi  # Increased from 50Gi to cache large base models (e.g., llama-3.2-1b-instruct ~62GB)
+  workspacePVC:
+    storageClass: "gp3-csi"  # Changed from "local-path" to match cluster storage class
+    size: 50Gi  # Increased from 10Gi for training job model storage
+    mountPath: /pvc/workspace
+  modelConfig:
+    name: nemo-model-config
+  trainingConfig:
+    name: nemo-training-config
+  ngcAPISecret:
+    name: ngc-api-secret
+    key: "NGC_API_KEY"
+  tolerations:
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "g5-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "g6e-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
+  # Resource requests/limits for training job pods
+  # Ephemeral storage is critical - the customizer image is ~62GB
+  resources:
+    requests:
+      ephemeral-storage: "80Gi"  # Enough for image pull + container filesystem
+      memory: "32Gi"
+      cpu: "4"
+      nvidia.com/gpu: "1"
+    limits:
+      ephemeral-storage: "100Gi"  # Upper limit to prevent node issues
+      memory: "64Gi"
+      cpu: "8"
+      nvidia.com/gpu: "1"
+
+# ===== NemoDatastore Configuration =====
+# Image: nvcr.io/nvidia/nemo-microservices/datastore:25.12
+datastore:
+  enabled: true
+  name: nemodatastore-sample
+  image:
+    repository: nvcr.io/nvidia/nemo-microservices/datastore
+    tag: "25.12"
+    pullPolicy: IfNotPresent
+  database:
+    # host will be templated in the template file
+    port: 5432
+    databaseName: ndsdb
+    user: ndsuser
+    secretName: datastore-pg-existing-secret
+    passwordKey: password
+  pvc:
+    name: "pvc-shared-data"
+    create: true
+    size: "10Gi"
+  replicas: 1
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "500m"
+    limits:
+      memory: "512Mi"
+      cpu: "1"
+  secrets:
+    datastoreConfigSecret: "nemo-ms-nemo-datastore"
+    datastoreInitSecret: "nemo-ms-nemo-datastore-init"
+    datastoreInlineConfigSecret: "nemo-ms-nemo-datastore-inline-config"
+    giteaAdminSecret: "gitea-admin-credentials"
+    lfsJwtSecret: "nemo-ms-nemo-datastore--lfs-jwt"
+  # Gitea admin credentials (replace for production)
+  gitea:
+    adminUsername: "datastore_admin"
+    adminPassword: "CHANGE_ME"  # Replace with secure password
+  # LFS JWT secret (generate with: openssl rand -base64 32 | base64)
+  lfsJwtSecret: "CHANGE_ME_BASE64"  # Replace with your base64-encoded secret
+
+# ===== NemoEntitystore Configuration =====
+# Image: nvcr.io/nvidia/nemo-microservices/entity-store:25.12
+entitystore:
+  enabled: true
+  name: nemoentitystore-sample
+  image:
+    repository: nvcr.io/nvidia/nemo-microservices/entity-store
+    tag: "25.12"
+    pullPolicy: IfNotPresent
+  database:
+    # host will be templated in the template file
+    port: 5432
+    databaseName: nesdb
+    user: nesuser
+    secretName: entity-store-pg-existing-secret
+    passwordKey: password
+
+# ===== NemoEvaluator Configuration =====
+# Image: nvcr.io/nvidia/nemo-microservices/evaluator:25.12
+evaluator:
+  enabled: true
+  name: nemoevaluator-sample
+  image:
+    repository: nvcr.io/nvidia/nemo-microservices/evaluator
+    tag: "25.12"
+    pullPolicy: IfNotPresent
+  evaluationImages:
+    bigcodeEvalHarness: "nvcr.io/nvidia/nemo-microservices/eval-tool-benchmark-bigcode:0.12.21"
+    lmEvalHarness: "nvcr.io/nvidia/nemo-microservices/eval-tool-benchmark-lm-eval-harness:0.12.21"
+    similarityMetrics: "nvcr.io/nvidia/nemo-microservices/eval-tool-benchmark-custom-eval:0.12.21"
+    llmAsJudge: "nvcr.io/nvidia/nemo-microservices/eval-tool-benchmark-llm-as-a-judge:0.12.21"
+    mtBench: "nvcr.io/nvidia/nemo-microservices/eval-tool-benchmark-llm-as-a-judge:0.12.21"
+    retriever: "nvcr.io/nvidia/nemo-microservices/eval-tool-benchmark-retriever:0.12.21"
+    rag: "nvcr.io/nvidia/nemo-microservices/eval-tool-benchmark-rag:0.12.21"
+    bfcl: "nvcr.io/nvidia/nemo-microservices/eval-factory-benchmark-bfcl:25.6.1"
+    agenticEval: "nvcr.io/nvidia/nemo-microservices/eval-factory-benchmark-agentic-eval:25.6.1"
+  argoWorkflows:
+    # endpoint will be templated in the template file
+    serviceAccount: argo-workflows-executor
+  vectorDB:
+    # endpoint will be templated (host from evaluator.vectorDB.host, same namespace)
+    host: "nemo-infra-evaluator-milvus"
+  database:
+    # host will be templated in the template file
+    port: 5432
+    databaseName: evaldb
+    user: evaluser
+    secretName: evaluator-pg-existing-secret
+    passwordKey: password
+  otel:
+    enabled: true
+    # exporterOtlpEndpoint will be templated in the template file
+  # DestinationRule for TLS/mTLS configuration
+  # Set to true to disable TLS for evaluator service (required for some Istio configurations)
+  destinationRule:
+    enabled: true
+  # Environment variables for the evaluator pod
+  # NIM_PROXY_URL points to the NIM service for evaluation jobs
+  # Configure via evaluator.nimProxy section below (for NIM deployed via RHOAI/OpenShift AI)
+  env:
+    - name: NIM_PROXY_URL
+      # Will be templated in nemoevaluator.yaml using evaluator.nimProxy configuration
+      value: ""  # Will be templated in nemoevaluator.yaml
+  # NIM Proxy configuration (for NIM deployed via RHOAI/OpenShift AI KServe InferenceService)
+  # If not set, defaults to meta-llama3-1b-instruct service
+  nimProxy:
+    # Service name (e.g., meta-llama3-1b-instruct-predictor for KServe InferenceService)
+    serviceName: ""
+    # Service suffix (e.g., "-predictor" for KServe InferenceService)
+    serviceSuffix: ""
+    # Namespace (defaults to namespace.name if not set)
+    namespace: ""
+    # Path (e.g., "/v1" for KServe InferenceService)
+    path: ""
+    # Port for NIM/KServe service (80 for KServe InferenceService, 8000 for NIMPipeline)
+    port: "80"
+  replicas: 1
+
+# ===== NemoGuardrail Configuration =====
+# Image: nvcr.io/nvidia/nemo-microservices/guardrails:25.12
+guardrail:
+  enabled: true
+  name: nemoguardrails-sample
+  image:
+    repository: nvcr.io/nvidia/nemo-microservices/guardrails
+    tag: "25.12"
+    pullPolicy: IfNotPresent
+  database:
+    # host will be templated in the template file
+    port: 5432
+    databaseName: guardraildb
+    user: guardrailuser
+    secretName: guardrail-pg-existing-secret
+    passwordKey: password
+  configStorePVC:
+    name: "pvc-guardrail-config"
+    create: true
+    size: "1Gi"
+  # NIM endpoint configuration (for NIM deployed via RHOAI/OpenShift AI KServe InferenceService)
+  # If not set, defaults to meta-llama3-1b-instruct service
+  nimEndpoint:
+    # Service name (e.g., meta-llama3-1b-instruct-predictor for KServe InferenceService)
+    serviceName: ""
+    # Service suffix (e.g., "-predictor" for KServe InferenceService)
+    serviceSuffix: ""
+    # Namespace (defaults to namespace.name if not set)
+    namespace: ""
+    # Port (defaults to 80 for KServe InferenceService)
+    port: ""
+  replicas: 1
+  resources:
+    limits:
+      cpu: "1"
+      ephemeral-storage: 10Gi
+
+# ===== NIMCache Configuration (Chat Model) =====
+# Model: nvcr.io/nim/meta/llama-3.2-1b-instruct:1.8.3 (chat model for inference)
+# Restored for better integration with NeMo Microservices
+# PVC size: model puller caches multiple GPU profiles (h100, l40s, h200, fp8, bf16, etc.).
+# 50Gi often fills up -> "No space left on device" and repeated cache job failures (multiple pods).
+# Use at least 100Gi if you see those errors.
+nimCache:
+  enabled: true
+  name: meta-llama3-1b-instruct
+  modelPuller: nvcr.io/nim/meta/llama-3.2-1b-instruct:1.8.3
+  engine: tensorrt_llm
+  tensorParallelism: "1"
+  pullSecret: ngc-secret
+  authSecret: ngc-api-secret
+  # OpenShift-compatible UIDs (required for nonroot SCC)
+  # Range: 1000790000-1000799999
+  userID: 1000790000
+  groupID: 1000790000
+  pvc:
+    create: true
+    size: "100Gi"
+  tolerations:
+    - key: "g5-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "g5-small-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "g6e-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+# ===== NIMPipeline Configuration (Chat Model) =====
+# Model: nvcr.io/nim/meta/llama-3.2-1b-instruct:1.8.3 (chat model pipeline)
+# Restored for better integration with NeMo Microservices
+nimPipeline:
+  enabled: true
+  name: llama3-1b-pipeline
+  serviceName: meta-llama3-1b-instruct
+  image:
+    repository: nvcr.io/nim/meta/llama-3.2-1b-instruct
+    tag: 1.8.3
+    pullPolicy: IfNotPresent
+  pullSecret: ngc-secret
+  authSecret: ngc-api-secret
+  nimCacheName: meta-llama3-1b-instruct
+  replicas: 1
+  resources:
+    limits:
+      gpu: 1
+  tolerations:
+    - key: "g5-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "g5-small-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "g6e-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+# ===== NIMCache Embedding Configuration =====
+# Model: nvcr.io/nim/nvidia/llama-3.2-nv-embedqa-1b-v2:1.3.1 (embedding model for RAG)
+# Disable when GPU is limited; re-enable for RAG demos when you have allocatable GPUs.
+nimCacheEmbedding:
+  enabled: true
+  name: nv-embedqa-1b-v2
+  modelPuller: nvcr.io/nim/nvidia/llama-3.2-nv-embedqa-1b-v2:1.3.1
+  engine: tensorrt  # Embedding models use tensorrt, not tensorrt_llm
+  # Note: tensorParallelism is NOT used for embedding models (only for LLM with tensorrt_llm)
+  pullSecret: ngc-secret
+  authSecret: ngc-api-secret
+  # OpenShift-compatible UIDs (required for nonroot SCC)
+  # Range: 1000790000-1000799999
+  userID: 1000790000
+  groupID: 1000790000
+  pvc:
+    create: true
+    size: "50Gi"  # Official sample uses 50Gi
+  tolerations:
+    - key: "g5-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "g5-small-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "g6e-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+# ===== NIMPipeline Embedding Configuration =====
+# Disable when GPU is limited; re-enable for RAG demos when you have allocatable GPUs.
+nimPipelineEmbedding:
+  enabled: true
+  name: embedding-1b-v2-pipeline
+  serviceName: nv-embedqa-1b-v2
+  image:
+    repository: nvcr.io/nim/nvidia/llama-3.2-nv-embedqa-1b-v2
+    tag: 1.3.1
+    pullPolicy: IfNotPresent
+  pullSecret: ngc-secret
+  authSecret: ngc-api-secret
+  nimCacheName: nv-embedqa-1b-v2
+  replicas: 1
+  resources:
+    limits:
+      gpu: 1
+  tolerations:
+    - key: "g5-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "g5-small-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "g6e-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+# ===== NIMCache Retriever Configuration =====
+# Disable when GPU is limited; re-enable for RAG demos when you have allocatable GPUs.
+nimCacheRetriever:
+  enabled: true
+  name: nv-rerankqa-1b-v2
+  modelPuller: nvcr.io/nim/nvidia/llama-3.2-nv-rerankqa-1b-v2:1.3.1
+  engine: tensorrt  # Retriever models use tensorrt, not tensorrt_llm
+  # Note: tensorParallelism is NOT used for retriever models (only for LLM with tensorrt_llm)
+  pullSecret: ngc-secret
+  authSecret: ngc-api-secret
+  # OpenShift-compatible UIDs (required for nonroot SCC)
+  # Range: 1000790000-1000799999
+  userID: 1000790000
+  groupID: 1000790000
+  pvc:
+    create: true
+    size: "50Gi"  # Same as embedding model
+  tolerations:
+    - key: "g5-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "g5-small-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "g6e-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+# ===== NIMPipeline Retriever Configuration =====
+# Disable when GPU is limited; re-enable for RAG demos when you have allocatable GPUs.
+nimPipelineRetriever:
+  enabled: true
+  name: retriever-rerankqa-pipeline
+  serviceName: nv-rerankqa-1b-v2
+  image:
+    repository: nvcr.io/nim/nvidia/llama-3.2-nv-rerankqa-1b-v2
+    tag: 1.3.1
+    pullPolicy: IfNotPresent
+  pullSecret: ngc-secret
+  authSecret: ngc-api-secret
+  nimCacheName: nv-rerankqa-1b-v2
+  replicas: 1
+  resources:
+    limits:
+      gpu: 1
+  tolerations:
+    - key: "g5-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "g5-small-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "g6e-gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+# ===== LlamaStack Configuration =====
+# LlamaStack provides a unified abstraction layer over NeMo Microservices
+# Image: quay.io/ecosystem-appeng/llamastack-server-distribution:latest
+llamastack:
+  enabled: true
+  name: llamastack
+  configMapName: llamastack-config
+  image:
+    repository: quay.io/ecosystem-appeng/llamastack-server-distribution
+    tag: "latest"
+    pullPolicy: Always
+  pullSecret: ngc-secret
+  ngcAPISecret:
+    name: ngc-api-secret
+    key: "NGC_API_KEY"
+  replicas: 1
+  port: 8321
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 0
+  # LlamaStack configuration
+  datasetNamespace: "nvidia-e2e-tutorial"
+  projectId: "llamastack-project"
+  guardrailsConfigId: "demo-self-check-input-output"
+  # Inference model identifier (optional - defaults to a common model name)
+  # This is used by LlamaStack for model identification in its API
+  # If not specified, defaults to "meta/llama-3.2-1b-instruct"
+  # Only override if you need a different model identifier
+  inferenceModel: "meta/llama-3.2-1b-instruct"
+  # Safety model identifier (for guardrails)
+  safetyModel: "meta/llama-3.2-1b-instruct"
+  outputModelDir: "nvidia-e2e-tutorial/test-messages-model@v1"
+  # REQUIRED: KServe InferenceService name (without -predictor suffix)
+  # This is the name of your InferenceService resource
+  # Example: anemo-rhoai-model1
+  # The template will automatically construct:
+  #   - Service account name: <inferenceServiceName>-sa
+  #   - Predictor service name: <inferenceServiceName>-predictor
+  # Example: If inferenceServiceName is "anemo-rhoai-model1", then:
+  #   - serviceAccountName will be "anemo-rhoai-model1-sa"
+  #   - inferenceServicePredictor will be "anemo-rhoai-model1-predictor"
+  inferenceServiceName: "your-inferenceservice-name"  # e.g. redhataillama-31-8b-instruct or my-model
+  # InferenceService namespace (optional)
+  # If not set, defaults to the main namespace (namespace.name)
+  # Only set this if your InferenceService is in a different namespace
+  inferenceServiceNamespace: ""
+  # Service account name for LlamaStack (typically created by InferenceService)
+  # Format: <inferenceservice-name>-sa
+  # If not set, will be auto-constructed from inferenceServiceName as: <inferenceServiceName>-sa
+  # Only override this if your service account has a different naming convention
+  serviceAccountName: ""
+  # Whether to create the service account (set to false if InferenceService creates it)
+  # Default: false (InferenceService typically creates the service account)
+  createServiceAccount: false
+  # KServe InferenceService predictor service name (cluster-internal)
+  # This is the stable service name that routes to the latest revision
+  # Format: <inferenceservice-name>-predictor
+  # If not set, will be auto-constructed from inferenceServiceName as: <inferenceServiceName>-predictor
+  # Only override this if your service has a different naming convention
+  inferenceServicePredictor: ""
+  # Direct override for NVIDIA_BASE_URL (optional, advanced)
+  # If set, this will be used instead of auto-constructing from inferenceServicePredictor
+  # Format: http://<service-name>.<namespace>.svc.cluster.local:<port>
+  # Example: http://my-model-predictor.my-namespace.svc.cluster.local:80
+  # If not set, will be auto-constructed from inferenceServicePredictor and namespace
+  nvidiaBaseURL: ""
+  # Use Bearer token authentication instead of API key for KServe InferenceService
+  # Set to true when using KServe InferenceService that requires service account token
+  useBearerToken: true
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1"
+
+# ===== NeMo Operator (install separately) =====
+# NeMo Operator is not a Helm dependency. Install before this chart using VERSION=25.6.0 (per NIM Operator docs):
+#   export NAMESPACE=anemo-rhoai NGC_API_KEY='your-key' VERSION=25.6.0
+#   helm fetch "https://helm.ngc.nvidia.com/nvidia/nemo-microservices/charts/nemo-operator-${VERSION}.tgz" --username='$oauthtoken' --password="$NGC_API_KEY"
+#   helm upgrade --install nemo-operator "nemo-operator-${VERSION}.tgz" -n $NAMESPACE --set 'imagePullSecrets[0].name=ngc-secret' --set controllerManager.manager.scheduler=volcano
+# If fetch returns 404, add the repo with auth and install from repo: helm repo add nmp https://helm.ngc.nvidia.com/nvidia/nemo-microservices --username='$oauthtoken' --password="$NGC_API_KEY" && helm repo update && helm search repo nmp
+# The section below is not used by this chart; kept for reference.
+nemo-operator:
+  # NeMo Operator chart configuration
+  # Following quickstart Step 4 (lines 114-133):
+  # - Helm install with resource limits (lines 122-126)
+  # - ServiceAccount configured with ngc-secret from the start (no patching needed)
+  # 
+  # Prerequisites (quickstart lines 43-47):
+  # - ngc-secret must be created manually BEFORE installation:
+  #   oc create secret docker-registry ngc-secret \
+  #     --docker-server=nvcr.io \
+  #     --docker-username='$oauthtoken' \
+  #     --docker-password=$NGC_API_KEY \
+  #     -n <namespace>
+  
+  # Image pull secrets configuration (uses ngc-secret directly, no patching required)
+  imagePullSecrets:
+    - name: ngc-secret
+  
+  # Manager resource configuration (exact from quickstart lines 124-125)
+  manager:
+    resources:
+      limits:
+        memory: 512Mi
+      requests:
+        memory: 256Mi
+
+# ===== NIM Operator Subchart =====
+nim-operator:
+  # NIM Operator 3.0.2 from official NVIDIA Helm repo (https://helm.ngc.nvidia.com/nvidia)
+  # Image defaults to nvcr.io/nvidia/cloud-native/k8s-nim-operator:v3.0.2 from the chart.
+  # OpenShift: can also install via Console (Ecosystem > Software Catalog > NVIDIA NIM Operator).
+  operator:
+    resources:
+      limits:
+        memory: 512Mi
+      requests:
+        memory: 256Mi
+

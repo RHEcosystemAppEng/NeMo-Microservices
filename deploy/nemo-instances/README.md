@@ -2,6 +2,8 @@
 
 A Helm chart for creating and deploying NVIDIA NeMo microservices instances - example deployments that demonstrate how to use the NeMo infrastructure.
 
+> **Values file**: `values.yaml` is gitignored (it may contain sensitive URLs and credentials). Copy `values.yaml.sample` to `values.yaml` and replace placeholders with your deployment-specific values before installing.
+
 ## Overview
 
 This chart installs the NeMo and NIM operators, then deploys 7 custom resources that represent example NeMo microservices:

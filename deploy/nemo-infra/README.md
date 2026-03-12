@@ -2,6 +2,8 @@
 
 A Helm chart for deploying NVIDIA NeMo infrastructure components on OpenShift, including PostgreSQL databases, MLflow, Argo Workflows, Milvus, OpenTelemetry, MinIO, and Volcano Scheduler.
 
+> **Values file**: `values.yaml` is gitignored (it may contain sensitive URLs and credentials). Copy `values.yaml.sample` to `values.yaml` and replace placeholders with your deployment-specific values before installing.
+
 ## Table of Contents
 
 1. [Overview](#overview)
