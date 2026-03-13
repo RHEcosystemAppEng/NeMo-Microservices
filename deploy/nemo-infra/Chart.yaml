@@ -3,7 +3,7 @@ name: nemo-infra
 description: NVIDIA NeMo Infrastructure Components Helm Chart for OpenShift
 type: application
 version: 1.0.0
-appVersion: "25.06"
+appVersion: "25.12"
 keywords:
   - nvidia
   - nemo

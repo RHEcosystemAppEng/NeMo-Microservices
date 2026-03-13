@@ -1,4 +1,7 @@
-# NeMo Infrastructure Helm Chart Values
+# NeMo Infrastructure Helm Chart Values (SAMPLE)
+# Copy this file to values.yaml and replace placeholders with your deployment-specific values.
+# values.yaml is gitignored and must not contain sensitive URLs or credentials in the repo.
+#
 # Replicates the exact Ansible deployment from QUICK-START-OpenShift.md
 
 # Global settings
@@ -6,10 +9,10 @@ global:
   security:
     allowInsecureImages: true  # Allow custom images (PostgreSQL, MinIO, Python, etc.)
 
-# Installation namespace
+# Installation namespace (replace with your OpenShift project/namespace)
 namespace:
   create: false
-  name: anemo-rhoai
+  name: your-namespace
 
 # Storage configuration
 pvc:
@@ -37,7 +40,7 @@ datastore-postgresql:
     tag: latest
   auth:
     username: ndsuser
-    password: ndspass
+    password: CHANGE_ME  # Replace with secure password
     database: ndsdb
   architecture: standalone
   primary:
@@ -56,7 +59,7 @@ entity-store-postgresql:
     tag: latest
   auth:
     username: nesuser
-    password: nespass
+    password: CHANGE_ME  # Replace with secure password
     database: nesdb
   architecture: standalone
   primary:
@@ -75,7 +78,7 @@ customizer-postgresql:
     tag: latest
   auth:
     username: ncsuser
-    password: ncspassword
+    password: CHANGE_ME  # Replace with secure password
     database: ncsdb
   architecture: standalone
   primary:
@@ -94,7 +97,7 @@ guardrail-postgresql:
     tag: latest
   auth:
     username: guardrailuser
-    password: guardrailpass
+    password: CHANGE_ME  # Replace with secure password
     database: guardraildb
   architecture: standalone
   primary:
@@ -113,7 +116,7 @@ evaluator-postgresql:
     tag: latest
   auth:
     username: evaluser
-    password: evalpass
+    password: CHANGE_ME  # Replace with secure password
     database: evaldb
   architecture: standalone
   primary:
@@ -155,8 +158,8 @@ customizer-mlflow:
       repository: minio/minio
       tag: latest
     auth:
-      rootUser: "minioadmin"
-      rootPassword: "minioadmin"
+      rootUser: "CHANGE_ME"   # Replace with MinIO admin user
+      rootPassword: "CHANGE_ME"  # Replace with secure password
     defaultBuckets: "mlflow"
     persistence:
       mountPath: "/data"
@@ -168,9 +171,9 @@ customizer-mlflow:
     extraEnvVars:
       # Dev-only defaults — do NOT use in production; use a secret reference for real deployments.
       - name: MINIO_ROOT_USER
-        value: "minioadmin"
+        value: "CHANGE_ME"
       - name: MINIO_ROOT_PASSWORD
-        value: "minioadmin"
+        value: "CHANGE_ME"
     command:
       - "/usr/bin/docker-entrypoint.sh"
     args:
@@ -187,7 +190,7 @@ customizer-mlflow:
       tag: latest
     auth:
       username: bn_mlflow
-      password: bn_mlflow
+      password: CHANGE_ME  # Replace with secure password
     enableDefaultInitContainers: false
   tracking:
     enabled: true
@@ -409,7 +412,7 @@ volcano:
     # 
     # To include multiple namespaces (e.g., if Volcano already exists in another namespace):
     # Add the namespace names to the values list below:
-    # values: ["arhkp-nemo-helm", "existing-volcano-namespace"]
+    # values: ["anemo-rhoai", "existing-volcano-namespace"]
     # Namespace scoping configuration for Volcano webhooks
     # The Volcano chart automatically adds a default exclusion for {{ .Release.Namespace }} and kube-system
     # Then it appends our custom expressions. In Kubernetes, matchExpressions are AND-ed together.
@@ -424,7 +427,7 @@ volcano:
       - key: kubernetes.io/metadata.name
         operator: In
         values:
-          - arhkp-nemo-helm  # Deployment namespace
+          - your-namespace  # Override with: --set volcano.custom.webhooks_namespace_selector_expressions[0].values[0]=YOUR_NAMESPACE
           # Add additional namespaces here if you want this Volcano installation to watch them:
           # - existing-volcano-namespace
           # - another-namespace

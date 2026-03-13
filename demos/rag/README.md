@@ -14,7 +14,9 @@ This example implements a complete RAG workflow:
 5. **Response Generation**: Generate answers using **LlamaStack client** (with fallback to direct Chat NIM) with retrieved context
 6. **Optional Guardrails**: Apply safety guardrails to responses
 
-## Prerequisites
+### RHOAI LlamaStack variant
+
+**`rag-tutorial-rhoai.ipynb`** is the same RAG flow but uses the **RHOAI-deployed LlamaStack** (e.g. `copilot-llama-stack`) for chat instead of the nemo-instances LlamaStack. Use it when your chat model is served via RHOAI’s copilot-llama-stack (no client API key; model id e.g. `vllm-inference/redhataillama-31-8b-instruct`). Copy `env.donotcommit.example` to `env.donotcommit` and set `NMS_NAMESPACE`; the notebook sets `LLAMASTACK_URL` and `LLAMASTACK_CHAT_MODEL` by default.
 
 ### Deployed Services
 - ✅ NeMo Data Store (v25.08+)
@@ -282,11 +284,16 @@ Guardrails can be integrated to:
 
 ## Troubleshooting
 
-### Embedding NIM Not Available
+### Embedding NIM: Connection Refused / Pod Pending (Insufficient nvidia.com/gpu)
 
-If the embedding NIM service is not deployed:
-1. Deploy it using the `nemo-instances` Helm chart with embedding NIM enabled
-2. Or use fallback options (external API, HuggingFace embeddings)
+If you see **Connection refused** to `nv-embedqa-1b-v2` and the pod is **Pending** with `0/x nodes available: x Insufficient nvidia.com/gpu`:
+
+- The **Embedding NIM** (nv-embedqa-1b-v2) requests 1 GPU. No node has an available GPU, so the pod never starts.
+- **Options:**
+  1. **Free a GPU**: Scale down or delete other GPU workloads so the embedding NIM pod can schedule. Check: `oc get pods -n <namespace> -o wide` and look for GPU-using pods.
+  2. **Add GPU nodes** to the cluster if you have no (or insufficient) GPU capacity.
+  3. **Use the notebook’s CPU fallback**: The RAG notebook tries **sentence-transformers** (all-MiniLM-L6-v2) on CPU when NIM is unreachable. Install once: `%pip install sentence-transformers`, then re-run the “Generate embeddings” cell. You’ll see a message like “Using CPU fallback: sentence-transformers/all-MiniLM-L6-v2”. Retrieval quality may differ slightly from NIM but the tutorial runs end-to-end.
+- To disable the embedding NIM and save GPU for other workloads, set `nimCacheEmbedding.enabled: false` and `nimPipelineEmbedding.enabled: false` in the nemo-instances Helm values (they are already false by default).
 
 ### Documents Not Retrieving
 
@@ -409,7 +416,8 @@ Entity Store registration is required for some NeMo services (like Customizer an
 
 ## Files
 
-- `rag-tutorial.ipynb` - Main tutorial notebook
+- `rag-tutorial.ipynb` - Main tutorial notebook (nemo-instances LlamaStack)
+- `rag-tutorial-rhoai.ipynb` - Same RAG flow using RHOAI LlamaStack (copilot-llama-stack)
 - `config.py` - Configuration file (cluster mode, includes LlamaStack URL)
 - `requirements.txt` - Python dependencies (includes llama-stack-client)
 - `../../commands.md` - Quick command reference guide (concise version without detailed explanations)

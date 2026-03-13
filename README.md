@@ -4,11 +4,35 @@ Helm charts for deploying NVIDIA NeMo microservices infrastructure and demos on 
 
 ## Prerequisites
 
-- OpenShift 4.x cluster
-- Helm 3.x
-- `oc` CLI configured
-- NGC API key (for pulling NVIDIA images)
-- GPU nodes (for training/inference workloads)
+- **OpenShift 4.x cluster** with sufficient capacity (see [Storage requirements](#storage-requirements) below)
+- **Helm 3.x** and **`oc` CLI** configured
+- **NGC API key** for pulling NVIDIA images and downloading models
+- **GPU nodes** for training and inference workloads
+- **Cluster admin permissions** (or equivalent) for:
+  - Creating and managing **Security Context Constraints (SCCs)** (e.g. for Customizer jobs, NIM, inference pods)
+  - Installing cluster-scoped or namespace-scoped operators and webhooks (e.g. Volcano)
+  - Creating service accounts and RBAC as required by the charts
+- **Service Mesh / Istio** (if used in your cluster): Ensure the deployment namespace is part of the mesh or that mesh policies (e.g. `PeerAuthentication`, `DestinationRule`) allow traffic to NeMo services. Unmanaged or disabled mesh in the namespace is also supported.
+
+## Storage requirements
+
+Plan and allocate persistent storage for the following. Default sizes are from the Helm chart values; adjust in `values.yaml` (or `values.yaml.sample`) as needed.
+
+| Component | Purpose | Default size | Notes |
+|-----------|---------|--------------|--------|
+| **Customizer (model PVC)** | Base model cache for fine-tuning | 100 Gi | Large base models (e.g. Llama 3.2 1B ~62 GB); increase if using larger models. |
+| **Customizer (workspace PVC)** | Training job workspace and checkpoints | 50 Gi | Increase for long runs or many experiments. |
+| **MLflow (MinIO)** | MLflow artifacts and model registry storage | 50 Gi | Object storage for tracked runs and artifacts. |
+| **MLflow (tracking DB volume)** | MLflow tracking DB persistence | 20 Gi | PostgreSQL-backed tracking store. |
+| **Vector DB (Milvus)** | Embedding vectors for RAG and evaluator | 100 Gi | Grows with document count and embedding dimension. |
+| **NIMCache (chat)** | Cached chat model (e.g. Llama 3.2 1B) | 100 Gi | Multiple GPU profiles (H100, L40S, etc.); 50 Gi often fills. |
+| **NIMCache (embedding)** | Cached embedding model | 50 Gi | For RAG embedding pipeline. |
+| **NIMCache (retriever)** | Cached retriever/reranker model | 50 Gi | For RAG retriever pipeline. |
+| **Datastore** | Shared data and Gitea storage | 10 Gi | Versioned datasets and configs. |
+| **Guardrail** | Guardrail config store | 1 Gi | Small config and rule storage. |
+| **PostgreSQL (per DB)** | Datastore, Entity Store, Customizer, Guardrail, Evaluator | 2 Gi each | Five databases; total ~10 Gi by default. |
+
+Ensure your cluster’s storage classes and quotas can satisfy these volumes. For production, use appropriate storage classes (e.g. for performance or backups).
 
 ## Charts
 
@@ -21,15 +45,19 @@ Helm charts for deploying NVIDIA NeMo microservices infrastructure and demos on 
 
 Before installation, ensure you have:
 
-1. **NGC Helm Repository** (required for NeMo Operator):
+1. **Cluster admin permissions** (or equivalent) for SCCs, operators, and RBAC (see [Prerequisites](#prerequisites) above).
+
+2. **Service Mesh / Istio**: If your cluster uses a service mesh, ensure the deployment namespace is configured appropriately (included in the mesh or exempted). Adjust `PeerAuthentication` or `DestinationRule` if NeMo services need to communicate across mesh boundaries.
+
+3. **NGC Helm Repository** (required for NeMo Operator):
    ```bash
    helm repo add nvidia-nemo https://helm.ngc.nvidia.com/nvidia-nemo
    helm repo update
    ```
 
-2. **NGC API Key** for pulling NVIDIA images and downloading models
+4. **NGC API Key** for pulling NVIDIA images and downloading models.
 
-3. **OpenShift Cluster** with GPU nodes available
+5. **OpenShift cluster** with GPU nodes available and sufficient storage (see [Storage requirements](#storage-requirements)).
 
 ### Step 1: Deploy Infrastructure
 

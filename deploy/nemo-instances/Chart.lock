@@ -1,0 +1,6 @@
+dependencies:
+- name: k8s-nim-operator
+  repository: https://helm.ngc.nvidia.com/nvidia
+  version: 3.0.2
+digest: sha256:b38fee07c9cda596697394806a126c16a73bf10741d62adc9b74df0111c68d62
+generated: "2026-03-06T15:03:00.996683-05:00"
