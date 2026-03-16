@@ -137,7 +137,7 @@ NIM_SERVICE_ACCOUNT_TOKEN=<your-service-account-token>
 Get your token:
 ```bash
 # Replace with your actual service account name (typically: <inferenceservice-name>-sa)
-oc create token anemo-rhoai-model-sa -n <your-namespace> --duration=8760h
+oc create token <inferenceservice>-sa -n <your-namespace> --duration=8760h
 ```
 
 3. **Model External URL** (REQUIRED):
@@ -230,7 +230,7 @@ You can add additional metrics to the evaluation configuration:
 
 ### Why External NIM Doesn't Work
 
-When using Knative InferenceServices (e.g., `anemo-rhoai-predictor-00002`), the Evaluator v25.06 has a bug that **strips the `/chat/completions` path** from URLs during job execution:
+When using Knative InferenceServices (e.g., `<predictor-service-name>`), the Evaluator v25.06 has a bug that **strips the `/chat/completions` path** from URLs during job execution:
 
 1. ✅ **Target creation works**: The evaluation target is stored correctly with the full URL (`/v1/chat/completions`)
 2. ✅ **Job submission works**: The job is accepted and created successfully

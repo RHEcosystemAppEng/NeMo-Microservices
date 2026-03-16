@@ -541,7 +541,7 @@ volcano:
       - key: kubernetes.io/metadata.name
         operator: In
         values:
-          - arhkp-nemo-helm  # Deployment namespace
+          - your-namespace  # Deployment namespace
           # Add additional namespaces if needed
 ```
 
@@ -557,7 +557,7 @@ volcano:
       - key: kubernetes.io/metadata.name
         operator: In
         values:
-          - arhkp-nemo-helm
+          - your-namespace
           - another-namespace
           - shared-namespace
 ```

@@ -21,13 +21,12 @@ except ImportError:
     # python-dotenv not installed - skip .env loading (will use system env vars only)
     pass
 
-# Namespace for cluster services
-# Default is provided for convenience, but should be set in env.donotcommit file
+# Namespace for cluster services (set in env.donotcommit or environment)
 NMS_NAMESPACE = os.getenv("NMS_NAMESPACE", "anemo-rhoai")
 
 # External NIM service variables (always defined for compatibility)
 # These are used for Knative InferenceService (not recommended due to URL stripping issues)
-EXTERNAL_NIM_SERVICE = os.getenv("EXTERNAL_NIM_SERVICE", "anemo-rhoai-predictor-00002")
+EXTERNAL_NIM_SERVICE = os.getenv("EXTERNAL_NIM_SERVICE", "your-predictor-service")
 EXTERNAL_NIM_NAMESPACE = os.getenv("EXTERNAL_NIM_NAMESPACE", NMS_NAMESPACE)
 EXTERNAL_NIM_PORT = os.getenv("EXTERNAL_NIM_PORT", "80")
 
@@ -53,12 +52,13 @@ NEMO_URL = EVALUATOR_URL
 # Note: Service name may differ from model name
 # For KServe InferenceService, use the external URL from the InferenceService status
 # Find your URL: oc get inferenceservice <name> -n <namespace> -o jsonpath='{.status.url}'
-NIM_MODEL_SERVING_SERVICE = os.getenv("NIM_MODEL_SERVING_SERVICE", "anemo-rhoai-model")
+NIM_MODEL_SERVING_SERVICE = os.getenv("NIM_MODEL_SERVING_SERVICE", "your-inferenceservice-name")
 NIM_MODEL_SERVING_MODEL = os.getenv("NIM_MODEL_SERVING_MODEL", "meta/llama-3.2-1b-instruct")
 
 # External URL (recommended - may work around Evaluator URL stripping bug)
 # This is the HTTPS URL from the InferenceService status
-NIM_MODEL_SERVING_URL_EXTERNAL = os.getenv("NIM_MODEL_SERVING_URL_EXTERNAL", "https://anemo-rhoai-model-anemo-rhoai.apps.ai-dev05.kni.syseng.devcluster.openshift.com")
+# Set via env; get with: oc get inferenceservice <name> -n $NAMESPACE -o jsonpath='{.status.url}'
+NIM_MODEL_SERVING_URL_EXTERNAL = os.getenv("NIM_MODEL_SERVING_URL_EXTERNAL", "")
 
 # Cluster-internal URL (has URL stripping bug in Evaluator v25.06/v25.08)
 # ⚠️  WARNING: Evaluator strips /chat/completions from cluster-internal Knative service URLs
@@ -100,13 +100,13 @@ else:
 
 # Option 2: Use Knative InferenceService (if standard service not available)
 # This is what was causing the URL stripping issue
-# EXTERNAL_NIM_SERVICE = os.getenv("EXTERNAL_NIM_SERVICE", "anemo-rhoai-predictor-00002")
+# EXTERNAL_NIM_SERVICE = os.getenv("EXTERNAL_NIM_SERVICE", "your-predictor-service")
 # EXTERNAL_NIM_NAMESPACE = os.getenv("EXTERNAL_NIM_NAMESPACE", NMS_NAMESPACE)
 # NIM_URL_CLUSTER = f"http://{EXTERNAL_NIM_SERVICE}.{EXTERNAL_NIM_NAMESPACE}.svc.cluster.local:80"
 
 # (Optional) NIM Service Account Token for authenticating with NIM model services
 # This is a Kubernetes service account token (JWT) used to authenticate with NIM endpoints
-# Get your token: oc create token anemo-rhoai-model-sa -n anemo-rhoai
+# Get your token: oc create token <inferenceservice>-sa -n $NAMESPACE
 NIM_SERVICE_ACCOUNT_TOKEN = os.getenv("NIM_SERVICE_ACCOUNT_TOKEN", "")
 
 # (Optional) NeMo Data Store token

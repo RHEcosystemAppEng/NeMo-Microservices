@@ -6,8 +6,8 @@
 #
 # Usage:
 #   ./setup_port_forwards.sh
-#   ./setup_port_forwards.sh anemo-rhoai
-#   NAMESPACE=anemo-rhoai ./setup_port_forwards.sh
+#   ./setup_port_forwards.sh your-namespace
+#   NAMESPACE=your-namespace ./setup_port_forwards.sh
 #
 # The port-forwards will run in the background. To stop them:
 #   ./stop_port_forwards.sh
@@ -17,7 +17,7 @@
 set -euo pipefail
 
 # Parse namespace from argument or environment variable
-NAMESPACE="${1:-${NAMESPACE:-anemo-rhoai}}"
+NAMESPACE="${1:-${NAMESPACE:-your-namespace}}"
 
 echo "=========================================="
 echo "Setting up port-forwards for NeMo services"

@@ -18,7 +18,7 @@ export NGC_API_KEY="<ngc-api-key>"
 ```
 
 **Note**: 
-- Replace `<namespace>` with your OpenShift project name (e.g., `anemo-rhoai`)
+- Replace `<namespace>` with your OpenShift project name (e.g., `your-namespace`)
 - Replace `<ngc-api-key>` with your NGC API key from [NGC Setup](https://ngc.nvidia.com/setup/api-key)
 - InferenceService-related values (name, token, URL) are available only after the InferenceService is deployed. See the [Configuration](#configuration) section for those commands.
 
@@ -418,7 +418,7 @@ oc scale deployment <deployment-name-old> -n $NAMESPACE --replicas=0
 
 Deploy your InferenceService using your preferred method (NIMPipeline, direct YAML, etc.). The InferenceService will automatically create a service account named `<inferenceservice-name>-sa`.
 
-**Example**: If your InferenceService is named `anemo-rhoai-model`, the service account will be `anemo-rhoai-model-sa`.
+**Example**: If your InferenceService is named `my-model`, the service account will be `my-model-sa`.
 
 **Verify InferenceService is deployed:**
 ```bash
@@ -459,7 +459,7 @@ helm upgrade nemo-instances . -n $NAMESPACE \
 ```
 
 **Note**: 
-- Only `llamastack.inferenceServiceName` is required (the Kubernetes resource name, e.g., `anemo-rhoai-model1`)
+- Only `llamastack.inferenceServiceName` is required (the Kubernetes resource name, e.g., `your-inferenceservice-name`)
 - The template auto-constructs:
   - Service account name: `<inferenceServiceName>-sa`
   - Predictor service name: `<inferenceServiceName>-predictor`
@@ -611,8 +611,8 @@ oc get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints | grep -E
 **If GPU taints exist, apply GPU tolerations to Workbench:**
 
 ```bash
-# 1) Find your notebook name and set NAMESPACE (e.g. anemo-rhoai)
-export NAMESPACE=anemo-rhoai
+# 1) Find your notebook name and set NAMESPACE
+export NAMESPACE=your-namespace
 oc get notebook -n $NAMESPACE
 
 # 2) Patch the Notebook CR (replace <notebook-name> with the actual name from above)
@@ -990,7 +990,7 @@ If you updated `values.yaml` with the `g5-small-gpu` toleration but **embedding*
 1. **Apply the change to the cluster** – Upgrade so the NIMPipeline CRs get the new tolerations, then make the operator recreate pods:
 
 ```bash
-export NAMESPACE=anemo-rhoai   # or your namespace
+export NAMESPACE=your-namespace   # set to your OpenShift project
 
 # Update CRs from the chart (if you haven't already)
 cd /path/to/NeMo-Microservices/deploy/nemo-instances
@@ -1267,7 +1267,7 @@ Use the same image as in your chart (e.g. `nvcr.io/nvidia/nemo-microservices/eva
 
 **Option 1 – patch from a file (avoids shell quoting issues):**
 ```bash
-export NAMESPACE=anemo-rhoai
+export NAMESPACE=your-namespace
 export EVALUATOR_IMAGE="nvcr.io/nvidia/nemo-microservices/evaluator:25.12"
 
 # Write the JSON patch to a file (no variable expansion in the path)
@@ -1380,15 +1380,15 @@ This section provides a complete reference for all placeholders used throughout 
 
 | Placeholder | Description | Example (from actual setup) | How to Get/Set |
 |------------|-------------|----------------------------|----------------|
-| `<namespace>` | Your OpenShift project/namespace name | `anemo-rhoai` | Create with `oc new-project <name>` or use existing: `oc projects` |
+| `<namespace>` | Your OpenShift project/namespace name | `your-namespace` | Create with `oc new-project <name>` or use existing: `oc projects` |
 | `<ngc-api-key>` | NVIDIA NGC API key for pulling images and accessing NGC | `nvapi-...` (keep secret) | Get from [NGC Setup](https://ngc.nvidia.com/setup/api-key) |
-| `<inferenceservice-name>` | Name of your KServe InferenceService | `anemo-rhoai-model` | Find with: `oc get inferenceservice -n $NAMESPACE` |
-| `<service-account-name>` | Kubernetes ServiceAccount name (typically `<inferenceservice-name>-sa`) | `anemo-rhoai-model-sa` | Find with: `oc get sa -n $NAMESPACE \| grep <inferenceservice-name>` |
+| `<inferenceservice-name>` | Name of your KServe InferenceService | `your-inferenceservice-name` | Find with: `oc get inferenceservice -n $NAMESPACE` |
+| `<service-account-name>` | Kubernetes ServiceAccount name (typically `<inferenceservice-name>-sa`) | `your-inferenceservice-name-sa` | Find with: `oc get sa -n $NAMESPACE \| grep <inferenceservice-name>` |
 | `<service-account-token>` | Service account token for authentication | `eyJhbGciOiJ...` (keep secret) | Generate with: `oc create token <service-account-name> -n $NAMESPACE --duration=8760h` |
-| `<inferenceservice-url>` | External URL of your InferenceService | `https://anemo-rhoai-model-anemo-rhoai.apps.ai-dev05.kni.syseng.devcluster.openshift.com` | Get with: `oc get inferenceservice <inferenceservice-name> -n $NAMESPACE -o jsonpath='{.status.url}'` |
-| `<notebook-name>` | Name of your Notebook/Workbench resource | `anemo-rhoai-wb` | Find with: `oc get notebook -n $NAMESPACE` |
-| `<pod-name-pending>` | Name of a pod stuck in Pending state | `anemo-rhoai-wb-0` | Find with: `oc get pods -n $NAMESPACE \| grep Pending` |
-| `<pod-name-new>` | Name of newly created pod (after patching) | `anemo-rhoai-model-predictor-00002-deployment-db5b8b89f-hdh7h` | Find with: `oc get pods -n $NAMESPACE \| grep <resource-name>` |
-| `<pod-name>` | Generic pod name (for troubleshooting) | `anemo-rhoai-wb-0` | Find with: `oc get pods -n $NAMESPACE` |
-| `<deployment-name-old>` | Old deployment name (to scale down) | `anemo-rhoai-model-predictor-00001-deployment` | Find with: `oc get deployment -n $NAMESPACE \| grep <inferenceservice-name>-predictor` |
+| `<inferenceservice-url>` | External URL of your InferenceService | (from cluster) | Get with: `oc get inferenceservice <inferenceservice-name> -n $NAMESPACE -o jsonpath='{.status.url}'` |
+| `<notebook-name>` | Name of your Notebook/Workbench resource | (from cluster) | Find with: `oc get notebook -n $NAMESPACE` |
+| `<pod-name-pending>` | Name of a pod stuck in Pending state | (from cluster) | Find with: `oc get pods -n $NAMESPACE \| grep Pending` |
+| `<pod-name-new>` | Name of newly created pod (after patching) | (from cluster) | Find with: `oc get pods -n $NAMESPACE \| grep <resource-name>` |
+| `<pod-name>` | Generic pod name (for troubleshooting) | (from cluster) | Find with: `oc get pods -n $NAMESPACE` |
+| `<deployment-name-old>` | Old deployment name (to scale down) | (from cluster) | Find with: `oc get deployment -n $NAMESPACE \| grep <inferenceservice-name>-predictor` |
 | `<gpu-node-name>` | GPU node name | `ip-10-0-12-250.ec2.internal` | Find with: `oc get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints \| grep gpu` |

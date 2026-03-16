@@ -58,7 +58,7 @@ oc get pods -n redhat-ods-applications -l app.kubernetes.io/name=llama-stack-ope
 LlamaStack needs a token to call your KServe InferenceService. Use the predictor's service account token:
 
 ```bash
-export NAMESPACE=anemo-rhoai   # or your namespace
+export NAMESPACE=your-namespace   # set to your OpenShift project/namespace
 
 # Create token (use the SA for your InferenceService, e.g. redhataillama-31-8b-instruct-sa)
 oc create token redhataillama-31-8b-instruct-sa -n $NAMESPACE --duration=8760h
@@ -72,17 +72,17 @@ See [llamastack-api-key-secret.yaml](llamastack-api-key-secret.yaml) for details
 ## 3. Apply LlamaStack distribution
 
 ```bash
-oc apply -f deploy/rhoai/copilot-llama-stack.yaml -n anemo-rhoai
+oc apply -f deploy/rhoai/copilot-llama-stack.yaml -n $NAMESPACE
 ```
 
-(Use your namespace if different from `anemo-rhoai`; update the `namespace` in the YAML or pass `-n`.)
+Replace `your-namespace` in the YAML files with your namespace, or pass `-n $NAMESPACE` when applying.
 
 ## 4. Verify
 
 ```bash
-oc get llamastackdistribution -n anemo-rhoai
-oc get pods -n anemo-rhoai | grep llama
-oc get svc -n anemo-rhoai | grep copilot-llama-stack
+oc get llamastackdistribution -n $NAMESPACE
+oc get pods -n $NAMESPACE | grep llama
+oc get svc -n $NAMESPACE | grep copilot-llama-stack
 ```
 
 Demos (e.g. [RAG with RHOAI LlamaStack](../../demos/rag/README.md#rhoai-llamastack-variant)) can then set `LLAMASTACK_URL` to `http://copilot-llama-stack-service.<namespace>.svc.cluster.local:8321` and use the RHOAI model id (e.g. `vllm-inference/redhataillama-31-8b-instruct`).

@@ -21,8 +21,7 @@ except ImportError:
     # python-dotenv not installed - skip .env loading (will use system env vars only)
     pass
 
-# Namespace for cluster services
-# Default is provided for convenience, but should be set in env.donotcommit file
+# Namespace for cluster services (set in env.donotcommit or environment)
 NMS_NAMESPACE = os.getenv("NMS_NAMESPACE", "anemo-rhoai")
 
 # Cluster-internal URLs (for running from within cluster Workbench/Notebook)
@@ -30,10 +29,10 @@ NDS_URL = f"http://nemodatastore-sample.{NMS_NAMESPACE}.svc.cluster.local:8000"
 ENTITY_STORE_URL = f"http://nemoentitystore-sample.{NMS_NAMESPACE}.svc.cluster.local:8000"
 GUARDRAILS_URL = f"http://nemoguardrails-sample.{NMS_NAMESPACE}.svc.cluster.local:8000"
 # Note: Service name may differ from model name
-# For KServe InferenceService, use the external URL from the InferenceService status
-# Find your URL: oc get inferenceservice <name> -n <namespace> -o jsonpath='{.status.url}'
-# Or use the predictor service name for cluster-internal access
-NIM_CHAT_URL = "https://anemo-rhoai-model-anemo-rhoai.apps.ai-dev05.kni.syseng.devcluster.openshift.com"
+# For KServe InferenceService, set via env or env.donotcommit (no default to avoid hard-coded URLs).
+# Get URL: oc get inferenceservice <name> -n $NAMESPACE -o jsonpath='{.status.url}'
+# Or for cluster-internal: http://<inferenceservice>-predictor.<namespace>.svc.cluster.local:80
+NIM_CHAT_URL = os.getenv("NIM_CHAT_URL", "")
 NIM_EMBEDDING_URL = f"http://nv-embedqa-1b-v2.{NMS_NAMESPACE}.svc.cluster.local:8000"
 # LlamaStack: override via LLAMASTACK_URL for RHOAI (e.g. copilot-llama-stack-service)
 LLAMASTACK_URL = os.getenv("LLAMASTACK_URL", f"http://llamastack.{NMS_NAMESPACE}.svc.cluster.local:8321")
@@ -46,7 +45,7 @@ LLAMASTACK_API_KEY = os.getenv("LLAMASTACK_API_KEY", "")
 # These are used for operations that run inside the cluster
 # Note: For KServe InferenceService, use the predictor service name (without revision number)
 # Find your service: oc get inferenceservice <name> -n <namespace> -o jsonpath='{.status.components.predictor.address.url}'
-NIM_CHAT_URL_CLUSTER = "https://anemo-rhoai-model-anemo-rhoai.apps.ai-dev05.kni.syseng.devcluster.openshift.com"
+NIM_CHAT_URL_CLUSTER = os.getenv("NIM_CHAT_URL_CLUSTER", NIM_CHAT_URL if NIM_CHAT_URL else "")
 NIM_EMBEDDING_URL_CLUSTER = f"http://nv-embedqa-1b-v2.{NMS_NAMESPACE}.svc.cluster.local:8000"
 
 # (Optional) NeMo Data Store token
@@ -65,7 +64,7 @@ HF_TOKEN = os.getenv("HF_TOKEN", "")
 
 # (Optional) NIM Service Account Token for authenticating with NIM model services
 # This is a Kubernetes service account token (JWT) used to authenticate with NIM endpoints
-# Get your token: oc create token anemo-rhoai-model-sa -n anemo-rhoai
+# Get your token: oc create token <inferenceservice>-sa -n $NAMESPACE
 NIM_SERVICE_ACCOUNT_TOKEN = os.getenv("NIM_SERVICE_ACCOUNT_TOKEN", "")
 
 # (Optional) RAG Configuration

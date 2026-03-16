@@ -34,6 +34,18 @@ Plan and allocate persistent storage for the following. Default sizes are from t
 
 Ensure your cluster’s storage classes and quotas can satisfy these volumes. For production, use appropriate storage classes (e.g. for performance or backups).
 
+## Configuration (minimal changes for new users)
+
+To use this repo with your own environment, set configuration in a few places instead of editing code:
+
+| What | Where | Set to |
+|------|--------|--------|
+| **Deployment namespace** | `deploy/nemo-infra/values.yaml` and `deploy/nemo-instances/values.yaml` (copy from `values.yaml.sample`) | Your OpenShift project name |
+| **Service URLs / InferenceService** | Helm `values.yaml` (e.g. `llamastack.inferenceServiceName`), or RHOAI YAML (e.g. `deploy/rhoai/copilot-llama-stack.yaml` `VLLM_URL`) | Your InferenceService name and namespace |
+| **Demos and notebooks** | `env.donotcommit` in each demo (copy from `env.donotcommit.example`) | `NMS_NAMESPACE`, `NIM_CHAT_URL` / `NIM_MODEL_SERVING_URL_EXTERNAL`, tokens as needed |
+
+There are no hard-coded namespaces or service URLs in the repo; all are driven by these config files and environment variables.
+
 ## Charts
 
 - **`deploy/nemo-infra`**: Infrastructure components (databases, MLflow, Argo, Milvus, Volcano, Operators)
@@ -209,8 +221,8 @@ oc get pods -n <namespace> | grep -E "(nemo-operator|nim-operator|nemocustomizer
 
 **Expected Output:**
 ```
-nemo-samples-nemo-operator-controller-manager-b4bd4bd69-vbh7z    2/2     Running     0          152m
-nemo-samples-nim-operator-666b78dd44-crmtm                       1/1     Running     0          152m
+nemo-instances-nemo-operator-controller-manager-...    2/2     Running     0          152m
+nemo-instances-nim-operator-...                       1/1     Running     0          152m
 nemocustomizer-sample-5d8b5fb5fb-qqd8c                           1/1     Running     0          50m
 nemodatastore-sample-74dcb5568d-qbkc8                           1/1     Running     0          152m
 nemoentitystore-sample-66b4fc4fdc-9n82g                         1/1     Running     0          152m

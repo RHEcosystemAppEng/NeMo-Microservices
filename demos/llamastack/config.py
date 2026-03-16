@@ -1,11 +1,13 @@
-# (Required) NeMo Microservices URLs
-NDS_URL = "http://nemodatastore-sample.<your-namespace>.svc.cluster.local:8000" # Data Store
-ENTITY_STORE_URL = "http://nemoentitystore-sample.<your-namespace>.svc.cluster.local:8000" # Entity Store
-NEMO_URL = "http://nemocustomizer-sample.<your-namespace>.svc.cluster.local:8000" # Customizer 
-EVAL_URL = "http://nemoevaluator-sample.<your-namespace>.svc.cluster.local:8000" # Evaluator
-GUARDRAILS_URL = "http://nemoguardrails-sample.<your-namespace>.svc.cluster.local:8000" # Guardrails
-NIM_URL = "http://meta-llama3-1b-instruct.<your-namespace>.svc.cluster.local:8000" # NIM
-LLAMASTACK_URL = "http://llamastack.<your-namespace>.svc.cluster.local:8321" # LlamaStack Server
+# (Required) NeMo Microservices URLs — set NMS_NAMESPACE in env or env.donotcommit
+import os
+_NMS_NAMESPACE = os.getenv("NMS_NAMESPACE", "anemo-rhoai")
+NDS_URL = f"http://nemodatastore-sample.{_NMS_NAMESPACE}.svc.cluster.local:8000"
+ENTITY_STORE_URL = f"http://nemoentitystore-sample.{_NMS_NAMESPACE}.svc.cluster.local:8000"
+NEMO_URL = f"http://nemocustomizer-sample.{_NMS_NAMESPACE}.svc.cluster.local:8000"
+EVAL_URL = f"http://nemoevaluator-sample.{_NMS_NAMESPACE}.svc.cluster.local:8000"
+GUARDRAILS_URL = f"http://nemoguardrails-sample.{_NMS_NAMESPACE}.svc.cluster.local:8000"
+NIM_URL = f"http://meta-llama3-1b-instruct.{_NMS_NAMESPACE}.svc.cluster.local:8000"
+LLAMASTACK_URL = f"http://llamastack.{_NMS_NAMESPACE}.svc.cluster.local:8321"
 
 # (Required) Configure the base model. Must be one supported by the NeMo Customizer deployment!
 BASE_MODEL = "meta/llama-3.2-1b-instruct"
