@@ -32,6 +32,7 @@ GUARDRAILS_URL = f"http://nemoguardrails-sample.{NMS_NAMESPACE}.svc.cluster.loca
 # For KServe InferenceService, set via env or env.donotcommit (no default to avoid hard-coded URLs).
 # Get URL: oc get inferenceservice <name> -n $NAMESPACE -o jsonpath='{.status.url}'
 # Or for cluster-internal: http://<inferenceservice>-predictor.<namespace>.svc.cluster.local:80
+# When not set, validate_config() will raise so the notebook fails fast with a clear error.
 NIM_CHAT_URL = os.getenv("NIM_CHAT_URL", "")
 NIM_EMBEDDING_URL = f"http://nv-embedqa-1b-v2.{NMS_NAMESPACE}.svc.cluster.local:8000"
 # LlamaStack: override via LLAMASTACK_URL for RHOAI (e.g. copilot-llama-stack-service)
@@ -72,4 +73,37 @@ NIM_SERVICE_ACCOUNT_TOKEN = os.getenv("NIM_SERVICE_ACCOUNT_TOKEN", "")
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "5"))
 # Similarity threshold for retrieval
 RAG_SIMILARITY_THRESHOLD = float(os.getenv("RAG_SIMILARITY_THRESHOLD", "0.3"))
+
+
+def validate_config() -> None:
+    """
+    Validate that all required environment/config values are set for the RAG demo.
+    Call this at the start of the notebook (e.g. right after importing config) to fail fast
+    with a clear error if something is missing.
+
+    Raises:
+        ValueError: With a message listing all missing required variables and how to set them.
+    """
+    missing = []
+
+    url = (NIM_CHAT_URL or "").strip()
+    if not url:
+        missing.append(
+            "NIM_CHAT_URL must be set. Set it in env.donotcommit (or environment). "
+            "Get URL: oc get inferenceservice <name> -n $NAMESPACE -o jsonpath='{.status.url}' "
+            "Or cluster-internal: http://<inferenceservice>-predictor.<namespace>.svc.cluster.local:80"
+        )
+    elif not (url.startswith("http://") or url.startswith("https://")):
+        missing.append(
+            "NIM_CHAT_URL must be a valid URL (http:// or https://). "
+            f"Current value: {url[:50]}..."
+        )
+
+    if missing:
+        header = (
+            "Configuration validation failed. The following required settings are missing or invalid:\n\n"
+            "  • " + "\n  • ".join(missing)
+            + "\n\nCopy env.donotcommit.example to env.donotcommit and fill in your values."
+        )
+        raise ValueError(header)
 

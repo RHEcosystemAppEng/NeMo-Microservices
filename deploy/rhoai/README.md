@@ -69,13 +69,22 @@ oc create secret generic copilot-llama-stack-api-key -n $NAMESPACE --from-litera
 
 See [llamastack-api-key-secret.yaml](llamastack-api-key-secret.yaml) for details.
 
-## 3. Apply LlamaStack distribution
+## 3. Deploy LlamaStack distribution
+
+**Preferred: Helm chart** (namespace and InferenceService name come from `values.yaml`)
+
+```bash
+cp deploy/rhoai/values.yaml.sample deploy/rhoai/values.yaml
+# Edit values.yaml: set namespace.name and copilotLlamaStack.inferenceService.name
+
+helm upgrade --install rhoai deploy/rhoai -f deploy/rhoai/values.yaml -n $NAMESPACE
+```
+
+**Alternative: Raw YAML** (replace `your-namespace` in the file, or rely on `-n $NAMESPACE` when applying)
 
 ```bash
 oc apply -f deploy/rhoai/copilot-llama-stack.yaml -n $NAMESPACE
 ```
-
-Replace `your-namespace` in the YAML files with your namespace, or pass `-n $NAMESPACE` when applying.
 
 ## 4. Verify
 

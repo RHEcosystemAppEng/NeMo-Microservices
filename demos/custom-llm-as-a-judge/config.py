@@ -58,6 +58,7 @@ NIM_MODEL_SERVING_MODEL = os.getenv("NIM_MODEL_SERVING_MODEL", "meta/llama-3.2-1
 # External URL (recommended - may work around Evaluator URL stripping bug)
 # This is the HTTPS URL from the InferenceService status
 # Set via env; get with: oc get inferenceservice <name> -n $NAMESPACE -o jsonpath='{.status.url}'
+# No default: when USE_EXTERNAL_URL is true, validate_config() will require this to be set.
 NIM_MODEL_SERVING_URL_EXTERNAL = os.getenv("NIM_MODEL_SERVING_URL_EXTERNAL", "")
 
 # Cluster-internal URL (has URL stripping bug in Evaluator v25.06/v25.08)
@@ -121,4 +122,49 @@ NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")  # For build.nvidia.com / integ
 
 # (Optional) Hugging Face Token (if needed for dataset downloads)
 HF_TOKEN = os.getenv("HF_TOKEN", "")
+
+
+def validate_config() -> None:
+    """
+    Validate that all required environment/config values are set for the current mode.
+    Call this at the start of the notebook (e.g. right after importing config) to fail fast
+    with a clear error if something is missing.
+
+    Raises:
+        ValueError: With a message listing all missing required variables and how to set them.
+    """
+    missing = []
+
+    if USE_NIM_MODEL_SERVING:
+        if USE_EXTERNAL_URL:
+            url = (NIM_MODEL_SERVING_URL_EXTERNAL or "").strip()
+            if not url:
+                missing.append(
+                    "NIM_MODEL_SERVING_URL_EXTERNAL must be set when using NIM Model Serving with external URL. "
+                    "Set it in env.donotcommit (or environment). "
+                    "Get the URL: oc get inferenceservice <name> -n $NAMESPACE -o jsonpath='{.status.url}'"
+                )
+            elif not (url.startswith("http://") or url.startswith("https://")):
+                missing.append(
+                    "NIM_MODEL_SERVING_URL_EXTERNAL must be a valid URL (http:// or https://). "
+                    f"Current value: {url[:50]}..."
+                )
+        if not (NIM_SERVICE_ACCOUNT_TOKEN or "").strip():
+            missing.append(
+                "NIM_SERVICE_ACCOUNT_TOKEN is required for NIM Model Serving auth. "
+                "Set it in env.donotcommit. Get token: oc create token <inferenceservice>-sa -n $NAMESPACE"
+            )
+        if NIM_MODEL_SERVING_SERVICE == "your-inferenceservice-name":
+            missing.append(
+                "NIM_MODEL_SERVING_SERVICE must be set to your actual InferenceService name (not the placeholder). "
+                "Set it in env.donotcommit."
+            )
+
+    if missing:
+        header = (
+            "Configuration validation failed. The following required settings are missing or invalid:\n\n"
+            "  • " + "\n  • ".join(missing)
+            + "\n\nCopy env.donotcommit.example to env.donotcommit and fill in your values."
+        )
+        raise ValueError(header)
 

@@ -1,0 +1,42 @@
+{{- if .Values.copilotLlamaStack.enabled }}
+{{- $ns := .Values.namespace.name }}
+{{- $infNs := .Values.copilotLlamaStack.inferenceService.namespace | default $ns }}
+---
+apiVersion: llamastack.io/v1alpha1
+kind: LlamaStackDistribution
+metadata:
+  name: {{ .Values.copilotLlamaStack.distributionName }}
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/name: copilot-llama-stack
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  server:
+    distribution:
+      name: "rh-dev"
+    userConfig:
+      configMapName: {{ .Values.copilotLlamaStack.configMapName }}
+    containerSpec:
+      name: llama-stack
+      port: 8321
+      resources:
+        limits:
+          cpu: {{ .Values.copilotLlamaStack.resources.limits.cpu }}
+          memory: {{ .Values.copilotLlamaStack.resources.limits.memory }}
+        requests:
+          cpu: {{ .Values.copilotLlamaStack.resources.requests.cpu }}
+          memory: {{ .Values.copilotLlamaStack.resources.requests.memory }}
+      env:
+        - name: INFERENCE_MODEL
+          value: {{ .Values.copilotLlamaStack.inferenceModel | quote }}
+        - name: VLLM_URL
+          value: "https://{{ .Values.copilotLlamaStack.inferenceService.name }}-predictor.{{ $infNs }}.svc.cluster.local:8443/v1"
+        - name: VLLM_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.copilotLlamaStack.apiKeySecret.name }}
+              key: {{ .Values.copilotLlamaStack.apiKeySecret.key }}
+        - name: VLLM_TLS_VERIFY
+          value: "false"
+{{- end }}

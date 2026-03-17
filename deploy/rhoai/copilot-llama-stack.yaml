@@ -1,13 +1,17 @@
 # LlamaStack (inference-only) for RHOAI — apply this + the API key secret.
 #
+# Preferred: Use the Helm chart so namespace and InferenceService name come from values.yaml:
+#   cp deploy/rhoai/values.yaml.sample deploy/rhoai/values.yaml
+#   # Edit values.yaml: namespace.name, copilotLlamaStack.inferenceService.name
+#   helm upgrade --install rhoai deploy/rhoai -f deploy/rhoai/values.yaml -n $NAMESPACE
+#
 # Why 2 files?
 # 1. This file: ConfigMap (run.yaml) + LlamaStackDistribution. Safe to commit.
 # 2. llamastack-api-key-secret.yaml: Secret with VLLM token. Create once via CLI or apply
 #    (do not commit real tokens). See that file for: oc create token ... && oc create secret ...
 #
-# Apply: export NAMESPACE=your-namespace && oc apply -f deploy/rhoai/copilot-llama-stack.yaml -n $NAMESPACE
-#        (Create the secret first; see llamastack-api-key-secret.yaml.)
-# Replace "your-namespace" in this file with your namespace, or rely on -n $NAMESPACE when applying.
+# Apply (raw): export NAMESPACE=your-namespace && oc apply -f deploy/rhoai/copilot-llama-stack.yaml -n $NAMESPACE
+#              Replace "your-namespace" below with your namespace, or rely on -n $NAMESPACE when applying.
 ---
 apiVersion: v1
 kind: ConfigMap

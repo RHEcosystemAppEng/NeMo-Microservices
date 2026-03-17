@@ -31,6 +31,7 @@ We ran `customize-model.ipynb` first, used scripts to download the customized mo
 
 5. **Redeploy SSR** (point InferenceService at the new MinIO path)  
    ```bash
+   export NAMESPACE=<your-namespace>   # set your OpenShift project/namespace
    oc patch inferenceservice <inferenceservice-name> -n $NAMESPACE --type='json' -p='[{"op":"replace","path":"/spec/predictor/model/storage/path","value":"models/llama-3.2-1b-instruct-cust"}]'
    oc delete pod -n $NAMESPACE -l serving.kserve.io/inferenceservice=<inferenceservice-name>
    ```
@@ -474,6 +475,8 @@ print(f"\n✅ Model uploaded to MinIO at: {TARGET_MINIO_PATH}")
 If updating an existing InferenceService to use the new model:
 
 ```bash
+export NAMESPACE=<your-namespace>   # set your OpenShift project/namespace
+
 # Update InferenceService storage path
 oc patch inferenceservice <inferenceservice-name> -n $NAMESPACE --type='json' -p='[
   {
