@@ -1,0 +1,31 @@
+# RHOAI Helm Chart Values (SAMPLE)
+# Copy to values.yaml and set your namespace and InferenceService details.
+# values.yaml is gitignored; do not commit credentials.
+#
+# Install: helm upgrade --install rhoai . -f values.yaml -n $NAMESPACE
+#          (Create the API key secret first; see llamastack-api-key-secret.yaml)
+
+# Installation namespace (OpenShift project / Kubernetes namespace)
+namespace:
+  name: your-namespace
+
+# Copilot LlamaStack (inference-only) — connects to vLLM InferenceService
+copilotLlamaStack:
+  enabled: true
+  configMapName: copilot-llama-stack-config
+  distributionName: copilot-llama-stack
+  # vLLM InferenceService that LlamaStack will call (KServe predictor)
+  inferenceService:
+    name: your-inference-service   # e.g. redhataillama-31-8b
+    namespace: ""                  # empty = same as .Values.namespace.name
+  inferenceModel: "vllm-inference/redhataillama-31-8b-instruct"
+  apiKeySecret:
+    name: copilot-llama-stack-api-key
+    key: api_key
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi

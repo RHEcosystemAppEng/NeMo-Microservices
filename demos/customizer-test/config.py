@@ -21,8 +21,7 @@ except ImportError:
     # python-dotenv not installed - skip .env loading (will use system env vars only)
     pass
 
-# Namespace for cluster services
-# Default is provided for convenience, but should be set in env.donotcommit file
+# Namespace for cluster services (example default; set NMS_NAMESPACE in env.donotcommit to override)
 NMS_NAMESPACE = os.getenv("NMS_NAMESPACE", "anemo-rhoai")
 
 # Cluster-internal URLs (for running from within cluster Workbench/Notebook)

@@ -11,13 +11,13 @@ This script retrieves customized model information from either:
     # Automatically finds and exports the last completed customization job!
 
 Explicit Usage:
-    python export_model_from_entity_store.py --model-name "anemo-rhoai/llama-3.2-1b-instruct-custom-1234567890-12345@1.0"
+    python export_model_from_entity_store.py --model-name "<namespace>/llama-3.2-1b-instruct-custom-1234567890-12345@1.0"
     
     Or with job ID:
     python export_model_from_entity_store.py --job-id "job-12345"
     
     Or set environment variables:
-    export CUSTOMIZED_MODEL_NAME="anemo-rhoai/llama-3.2-1b-instruct-custom-1234567890-12345@1.0"
+    export CUSTOMIZED_MODEL_NAME="<namespace>/llama-3.2-1b-instruct-custom-1234567890-12345@1.0"
     python export_model_from_entity_store.py
 """
 
@@ -512,7 +512,7 @@ Examples:
   python export_model_from_entity_store.py
 
   # Explicit model name
-  python export_model_from_entity_store.py --model-name "anemo-rhoai/llama-3.2-1b-instruct-custom-123@1.0"
+  python export_model_from_entity_store.py --model-name "<namespace>/llama-3.2-1b-instruct-custom-123@1.0"
 
   # Explicit job ID
   python export_model_from_entity_store.py --job-id "job-12345"
@@ -522,7 +522,7 @@ Examples:
         "--model-name",
         type=str,
         default=os.getenv("CUSTOMIZED_MODEL_NAME", ""),
-        help="Customized model name (e.g., anemo-rhoai/llama-3.2-1b-instruct-custom-1234567890-12345@1.0)"
+        help="Customized model name (e.g., <namespace>/llama-3.2-1b-instruct-custom-1234567890-12345@1.0)"
     )
     parser.add_argument(
         "--output",

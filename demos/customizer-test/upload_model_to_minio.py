@@ -9,7 +9,7 @@ Usage:
     python upload_model_to_minio.py --model-dir ./merged_model --target-path "models/llama-3.2-1b-instruct-cust"
     
     From laptop: MinIO is in-cluster, so port-forward first, then set endpoint:
-    oc port-forward -n anemo-rhoai svc/nemo-infra-minio 9000:80
+    oc port-forward -n $NAMESPACE svc/nemo-infra-minio 9000:80
     MINIO_ENDPOINT=http://localhost:9000 python upload_model_to_minio.py --model-dir ./merged_model --target-path models/llama-3.2-1b-instruct-cust
     
     Or update existing base model path:
@@ -221,7 +221,7 @@ def main():
             print("   2. Get credentials manually:")
             print(f"      oc get secret minio-conn1 -n {NMS_NAMESPACE} -o jsonpath='{{.data}}' | jq -r 'to_entries | .[] | \"\\(.key): \\(.value | @base64d)\"'")
             sys.exit(1)
-        # Override endpoint when uploading from laptop (port-forward: oc port-forward -n anemo-rhoai svc/nemo-infra-minio 9000:80)
+        # Override endpoint when uploading from laptop (port-forward: oc port-forward -n $NAMESPACE svc/nemo-infra-minio 9000:80)
         override = os.getenv("MINIO_ENDPOINT")
         if override:
             minio_config = {**minio_config, "endpoint": override}
@@ -239,8 +239,8 @@ def main():
         print(f"\n✅ Model uploaded successfully to MinIO!")
         print(f"\n📋 Next steps:")
         print(f"   1. Update InferenceService to use the new model path")
-        print(f"   2. Run: oc patch inferenceservice anemo-rhoai-model-ssr -n {NMS_NAMESPACE} --type='json' -p='[{{\"op\": \"replace\", \"path\": \"/spec/predictor/model/storage/path\", \"value\": \"{target_path}\"}}]'")
-        print(f"   3. Restart InferenceService pod: oc delete pod -n {NMS_NAMESPACE} -l serving.kserve.io/inferenceservice=anemo-rhoai-model-ssr")
+        print(f"   2. Run: oc patch inferenceservice <inferenceservice-name> -n {NMS_NAMESPACE} --type='json' -p='[{{\"op\": \"replace\", \"path\": \"/spec/predictor/model/storage/path\", \"value\": \"{target_path}\"}}]'")
+        print(f"   3. Restart InferenceService pod: oc delete pod -n {NMS_NAMESPACE} -l serving.kserve.io/inferenceservice=<inferenceservice-name>")
         print(f"   4. Run test-customized-model.ipynb to test the customized model")
         return 0
     else:

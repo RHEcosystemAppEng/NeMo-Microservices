@@ -1,18 +1,23 @@
 # LlamaStack (inference-only) for RHOAI — apply this + the API key secret.
 #
+# Preferred: Use the Helm chart so namespace and InferenceService name come from values.yaml:
+#   cp deploy/rhoai/values.yaml.sample deploy/rhoai/values.yaml
+#   # Edit values.yaml: namespace.name, copilotLlamaStack.inferenceService.name
+#   helm upgrade --install rhoai deploy/rhoai -f deploy/rhoai/values.yaml -n $NAMESPACE
+#
 # Why 2 files?
 # 1. This file: ConfigMap (run.yaml) + LlamaStackDistribution. Safe to commit.
 # 2. llamastack-api-key-secret.yaml: Secret with VLLM token. Create once via CLI or apply
 #    (do not commit real tokens). See that file for: oc create token ... && oc create secret ...
 #
-# Apply: oc apply -f deploy/rhoai/copilot-llama-stack.yaml -n anemo-rhoai
-#        (Create the secret first; see llamastack-api-key-secret.yaml.)
+# Apply (raw): export NAMESPACE=your-namespace && oc apply -f deploy/rhoai/copilot-llama-stack.yaml -n $NAMESPACE
+#              Replace "your-namespace" below with your namespace, or rely on -n $NAMESPACE when applying.
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: copilot-llama-stack-config
-  namespace: anemo-rhoai
+  namespace: your-namespace
 data:
   run.yaml: |
     version: '1'
@@ -55,7 +60,7 @@ apiVersion: llamastack.io/v1alpha1
 kind: LlamaStackDistribution
 metadata:
   name: copilot-llama-stack
-  namespace: anemo-rhoai
+  namespace: your-namespace
 spec:
   replicas: 1
   server:
@@ -78,10 +83,11 @@ spec:
       env:
         - name: INFERENCE_MODEL
           value: "vllm-inference/redhataillama-31-8b-instruct"
-        # Predictor uses HTTPS on 8443 (see: oc get svc -n anemo-rhoai | grep predictor).
+        # Replace <inference-service> and <your-namespace> with your InferenceService name and namespace.
+        # Predictor uses HTTPS on 8443 (see: oc get svc -n $NAMESPACE | grep predictor).
         # If you get APIConnectionError, ensure VLLM_TLS_VERIFY is "false"; optionally uncomment SSL_CERT_FILE below.
         - name: VLLM_URL
-          value: "https://redhataillama-31-8b-instruct-predictor.anemo-rhoai.svc.cluster.local:8443/v1"
+          value: "https://<inference-service>-predictor.<your-namespace>.svc.cluster.local:8443/v1"
         - name: VLLM_API_TOKEN
           valueFrom:
             secretKeyRef:

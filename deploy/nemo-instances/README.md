@@ -279,14 +279,14 @@ oc get -n <namespace> nimpipeline,nimcache,nimservice
 To verify all NeMo instances (operators, microservices, and NIM services) are running, use the following command:
 
 ```bash
-# Replace <namespace> with your actual namespace, e.g., arhkp-nemo-helm
+# Replace <namespace> with your actual namespace (e.g. your-namespace)
 oc get pods -n <namespace> | grep -E "(nemo-operator|nim-operator|nemocustomizer|nemodatastore|nemoentitystore|nemoevaluator|nemoguardrails|nimcache|nimpipeline)"
 ```
 
 **Expected Output:**
 ```
-nemo-samples-nemo-operator-controller-manager-b4bd4bd69-vbh7z    2/2     Running     0          152m
-nemo-samples-nim-operator-666b78dd44-crmtm                       1/1     Running     0          152m
+nemo-instances-nemo-operator-controller-manager-...    2/2     Running     0          152m
+nemo-instances-nim-operator-...                       1/1     Running     0          152m
 nemocustomizer-sample-5d8b5fb5fb-qqd8c                           1/1     Running     0          50m
 nemodatastore-sample-74dcb5568d-qbkc8                            1/1     Running     0          152m
 nemoentitystore-sample-66b4fc4fdc-9n82g                          1/1     Running     0          152m

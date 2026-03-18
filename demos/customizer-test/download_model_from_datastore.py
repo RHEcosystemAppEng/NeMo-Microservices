@@ -9,7 +9,7 @@ Usage:
     python download_model_from_datastore.py --model-info model_info.json --output-dir ./downloaded_model
     
     Or specify files_url directly:
-    python download_model_from_datastore.py --files-url "hf://datasets/anemo-rhoai/model-name" --output-dir ./downloaded_model
+    python download_model_from_datastore.py --files-url "hf://datasets/<namespace>/model-name" --output-dir ./downloaded_model
 """
 
 import os

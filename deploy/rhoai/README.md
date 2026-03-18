@@ -58,7 +58,7 @@ oc get pods -n redhat-ods-applications -l app.kubernetes.io/name=llama-stack-ope
 LlamaStack needs a token to call your KServe InferenceService. Use the predictor's service account token:
 
 ```bash
-export NAMESPACE=anemo-rhoai   # or your namespace
+export NAMESPACE=your-namespace   # set to your OpenShift project/namespace
 
 # Create token (use the SA for your InferenceService, e.g. redhataillama-31-8b-instruct-sa)
 oc create token redhataillama-31-8b-instruct-sa -n $NAMESPACE --duration=8760h
@@ -69,20 +69,29 @@ oc create secret generic copilot-llama-stack-api-key -n $NAMESPACE --from-litera
 
 See [llamastack-api-key-secret.yaml](llamastack-api-key-secret.yaml) for details.
 
-## 3. Apply LlamaStack distribution
+## 3. Deploy LlamaStack distribution
+
+**Preferred: Helm chart** (namespace and InferenceService name come from `values.yaml`)
 
 ```bash
-oc apply -f deploy/rhoai/copilot-llama-stack.yaml -n anemo-rhoai
+cp deploy/rhoai/values.yaml.sample deploy/rhoai/values.yaml
+# Edit values.yaml: set namespace.name and copilotLlamaStack.inferenceService.name
+
+helm upgrade --install rhoai deploy/rhoai -f deploy/rhoai/values.yaml -n $NAMESPACE
 ```
 
-(Use your namespace if different from `anemo-rhoai`; update the `namespace` in the YAML or pass `-n`.)
+**Alternative: Raw YAML** (replace `your-namespace` in the file, or rely on `-n $NAMESPACE` when applying)
+
+```bash
+oc apply -f deploy/rhoai/copilot-llama-stack.yaml -n $NAMESPACE
+```
 
 ## 4. Verify
 
 ```bash
-oc get llamastackdistribution -n anemo-rhoai
-oc get pods -n anemo-rhoai | grep llama
-oc get svc -n anemo-rhoai | grep copilot-llama-stack
+oc get llamastackdistribution -n $NAMESPACE
+oc get pods -n $NAMESPACE | grep llama
+oc get svc -n $NAMESPACE | grep copilot-llama-stack
 ```
 
 Demos (e.g. [RAG with RHOAI LlamaStack](../../demos/rag/README.md#rhoai-llamastack-variant)) can then set `LLAMASTACK_URL` to `http://copilot-llama-stack-service.<namespace>.svc.cluster.local:8321` and use the RHOAI model id (e.g. `vllm-inference/redhataillama-31-8b-instruct`).

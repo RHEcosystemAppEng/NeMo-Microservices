@@ -1,0 +1,47 @@
+{{- if .Values.copilotLlamaStack.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.copilotLlamaStack.configMapName }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app.kubernetes.io/name: copilot-llama-stack
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  run.yaml: |
+    version: '1'
+    image_name: "rh-dev"
+    apis:
+      - inference
+    providers:
+      inference:
+        - provider_id: vllm-inference
+          provider_type: remote::vllm
+          config:
+            url: ${env.VLLM_URL}
+            api_token: ${env.VLLM_API_TOKEN}
+            model: ${env.INFERENCE_MODEL}
+            tls_verify: ${env.VLLM_TLS_VERIFY}
+
+    storage:
+      backends:
+        local-kv-store:
+          type: kv_sqlite
+          db_path: /opt/app-root/src/.llama/distributions/rh/metadata.db
+        local-sql-store:
+          type: sql_sqlite
+          db_path: /opt/app-root/src/.llama/distributions/rh/conversations.db
+      stores:
+        metadata:
+          backend: local-kv-store
+          namespace: default
+        conversations:
+          backend: local-sql-store
+          namespace: default
+          table_name: conversations
+        inference:
+          backend: local-sql-store
+          namespace: default
+          table_name: inference
+      kv_store_provider_id: local-kv-store
+{{- end }}

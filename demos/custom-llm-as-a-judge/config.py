@@ -21,13 +21,12 @@ except ImportError:
     # python-dotenv not installed - skip .env loading (will use system env vars only)
     pass
 
-# Namespace for cluster services
-# Default is provided for convenience, but should be set in env.donotcommit file
+# Namespace for cluster services (set in env.donotcommit or environment)
 NMS_NAMESPACE = os.getenv("NMS_NAMESPACE", "anemo-rhoai")
 
 # External NIM service variables (always defined for compatibility)
 # These are used for Knative InferenceService (not recommended due to URL stripping issues)
-EXTERNAL_NIM_SERVICE = os.getenv("EXTERNAL_NIM_SERVICE", "anemo-rhoai-predictor-00002")
+EXTERNAL_NIM_SERVICE = os.getenv("EXTERNAL_NIM_SERVICE", "your-predictor-service")
 EXTERNAL_NIM_NAMESPACE = os.getenv("EXTERNAL_NIM_NAMESPACE", NMS_NAMESPACE)
 EXTERNAL_NIM_PORT = os.getenv("EXTERNAL_NIM_PORT", "80")
 
@@ -53,12 +52,14 @@ NEMO_URL = EVALUATOR_URL
 # Note: Service name may differ from model name
 # For KServe InferenceService, use the external URL from the InferenceService status
 # Find your URL: oc get inferenceservice <name> -n <namespace> -o jsonpath='{.status.url}'
-NIM_MODEL_SERVING_SERVICE = os.getenv("NIM_MODEL_SERVING_SERVICE", "anemo-rhoai-model")
+NIM_MODEL_SERVING_SERVICE = os.getenv("NIM_MODEL_SERVING_SERVICE", "your-inferenceservice-name")
 NIM_MODEL_SERVING_MODEL = os.getenv("NIM_MODEL_SERVING_MODEL", "meta/llama-3.2-1b-instruct")
 
 # External URL (recommended - may work around Evaluator URL stripping bug)
 # This is the HTTPS URL from the InferenceService status
-NIM_MODEL_SERVING_URL_EXTERNAL = os.getenv("NIM_MODEL_SERVING_URL_EXTERNAL", "https://anemo-rhoai-model-anemo-rhoai.apps.ai-dev05.kni.syseng.devcluster.openshift.com")
+# Set via env; get with: oc get inferenceservice <name> -n $NAMESPACE -o jsonpath='{.status.url}'
+# No default: when USE_EXTERNAL_URL is true, validate_config() will require this to be set.
+NIM_MODEL_SERVING_URL_EXTERNAL = os.getenv("NIM_MODEL_SERVING_URL_EXTERNAL", "")
 
 # Cluster-internal URL (has URL stripping bug in Evaluator v25.06/v25.08)
 # ⚠️  WARNING: Evaluator strips /chat/completions from cluster-internal Knative service URLs
@@ -100,13 +101,13 @@ else:
 
 # Option 2: Use Knative InferenceService (if standard service not available)
 # This is what was causing the URL stripping issue
-# EXTERNAL_NIM_SERVICE = os.getenv("EXTERNAL_NIM_SERVICE", "anemo-rhoai-predictor-00002")
+# EXTERNAL_NIM_SERVICE = os.getenv("EXTERNAL_NIM_SERVICE", "your-predictor-service")
 # EXTERNAL_NIM_NAMESPACE = os.getenv("EXTERNAL_NIM_NAMESPACE", NMS_NAMESPACE)
 # NIM_URL_CLUSTER = f"http://{EXTERNAL_NIM_SERVICE}.{EXTERNAL_NIM_NAMESPACE}.svc.cluster.local:80"
 
 # (Optional) NIM Service Account Token for authenticating with NIM model services
 # This is a Kubernetes service account token (JWT) used to authenticate with NIM endpoints
-# Get your token: oc create token anemo-rhoai-model-sa -n anemo-rhoai
+# Get your token: oc create token <inferenceservice>-sa -n $NAMESPACE
 NIM_SERVICE_ACCOUNT_TOKEN = os.getenv("NIM_SERVICE_ACCOUNT_TOKEN", "")
 
 # (Optional) NeMo Data Store token
@@ -121,4 +122,49 @@ NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")  # For build.nvidia.com / integ
 
 # (Optional) Hugging Face Token (if needed for dataset downloads)
 HF_TOKEN = os.getenv("HF_TOKEN", "")
+
+
+def validate_config() -> None:
+    """
+    Validate that all required environment/config values are set for the current mode.
+    Call this at the start of the notebook (e.g. right after importing config) to fail fast
+    with a clear error if something is missing.
+
+    Raises:
+        ValueError: With a message listing all missing required variables and how to set them.
+    """
+    missing = []
+
+    if USE_NIM_MODEL_SERVING:
+        if USE_EXTERNAL_URL:
+            url = (NIM_MODEL_SERVING_URL_EXTERNAL or "").strip()
+            if not url:
+                missing.append(
+                    "NIM_MODEL_SERVING_URL_EXTERNAL must be set when using NIM Model Serving with external URL. "
+                    "Set it in env.donotcommit (or environment). "
+                    "Get the URL: oc get inferenceservice <name> -n $NAMESPACE -o jsonpath='{.status.url}'"
+                )
+            elif not (url.startswith("http://") or url.startswith("https://")):
+                missing.append(
+                    "NIM_MODEL_SERVING_URL_EXTERNAL must be a valid URL (http:// or https://). "
+                    f"Current value: {url[:50]}..."
+                )
+        if not (NIM_SERVICE_ACCOUNT_TOKEN or "").strip():
+            missing.append(
+                "NIM_SERVICE_ACCOUNT_TOKEN is required for NIM Model Serving auth. "
+                "Set it in env.donotcommit. Get token: oc create token <inferenceservice>-sa -n $NAMESPACE"
+            )
+        if NIM_MODEL_SERVING_SERVICE == "your-inferenceservice-name":
+            missing.append(
+                "NIM_MODEL_SERVING_SERVICE must be set to your actual InferenceService name (not the placeholder). "
+                "Set it in env.donotcommit."
+            )
+
+    if missing:
+        header = (
+            "Configuration validation failed. The following required settings are missing or invalid:\n\n"
+            "  • " + "\n  • ".join(missing)
+            + "\n\nCopy env.donotcommit.example to env.donotcommit and fill in your values."
+        )
+        raise ValueError(header)
 

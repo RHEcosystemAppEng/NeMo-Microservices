@@ -31,8 +31,9 @@ We ran `customize-model.ipynb` first, used scripts to download the customized mo
 
 5. **Redeploy SSR** (point InferenceService at the new MinIO path)  
    ```bash
-   oc patch inferenceservice anemo-rhoai-model-ssr -n anemo-rhoai --type='json' -p='[{"op":"replace","path":"/spec/predictor/model/storage/path","value":"models/llama-3.2-1b-instruct-cust"}]'
-   oc delete pod -n anemo-rhoai -l serving.kserve.io/inferenceservice=anemo-rhoai-model-ssr
+   export NAMESPACE=<your-namespace>   # set your OpenShift project/namespace
+   oc patch inferenceservice <inferenceservice-name> -n $NAMESPACE --type='json' -p='[{"op":"replace","path":"/spec/predictor/model/storage/path","value":"models/llama-3.2-1b-instruct-cust"}]'
+   oc delete pod -n $NAMESPACE -l serving.kserve.io/inferenceservice=<inferenceservice-name>
    ```
 
 6. **Test with `test-customized-model.ipynb`**  
@@ -71,9 +72,9 @@ If running export scripts from your local machine, set up port-forwards first:
 ./setup_port_forwards.sh
 
 # Option 2: Manual port-forwards
-oc port-forward -n anemo-rhoai svc/nemodatastore-sample 8001:8000 &
-oc port-forward -n anemo-rhoai svc/nemoentitystore-sample 8002:8000 &
-oc port-forward -n anemo-rhoai svc/nemocustomizer-sample 8003:8000 &
+oc port-forward -n $NAMESPACE svc/nemodatastore-sample 8001:8000 &
+oc port-forward -n $NAMESPACE svc/nemoentitystore-sample 8002:8000 &
+oc port-forward -n $NAMESPACE svc/nemocustomizer-sample 8003:8000 &
 ```
 
 Then set environment variables:
@@ -101,7 +102,7 @@ cp env.donotcommit.example env.donotcommit
 
 Edit `env.donotcommit` and set:
 ```bash
-NMS_NAMESPACE=anemo-rhoai  # Your namespace
+NMS_NAMESPACE=your-namespace  # Set to your OpenShift project/namespace
 ```
 
 ### 2. Run in Workbench/Notebook (Cluster Mode)
@@ -127,13 +128,13 @@ Before running the notebook, verify services are running:
 
 ```bash
 # Check Customizer
-oc get pods -n anemo-rhoai | grep customizer | grep -v postgresql | grep -v mlflow
+oc get pods -n $NAMESPACE | grep customizer | grep -v postgresql | grep -v mlflow
 
 # Check DataStore
-oc get pods -n anemo-rhoai | grep datastore | grep -v postgresql
+oc get pods -n $NAMESPACE | grep datastore | grep -v postgresql
 
 # Check Entity Store
-oc get pods -n anemo-rhoai | grep entitystore | grep -v postgresql
+oc get pods -n $NAMESPACE | grep entitystore | grep -v postgresql
 ```
 
 ## What the Notebook Tests
@@ -173,17 +174,17 @@ If all tests pass, you should see:
 
 ```bash
 # ✅ Correct - includes revision
-python download_model_from_datastore.py --files-url "hf://anemo-rhoai/model-name@1.0" --output-dir ./downloaded_model
+python download_model_from_datastore.py --files-url "hf://$NAMESPACE/model-name@1.0" --output-dir ./downloaded_model
 
 # ❌ Incorrect - missing revision
-python download_model_from_datastore.py --files-url "hf://anemo-rhoai/model-name" --output-dir ./downloaded_model
+python download_model_from_datastore.py --files-url "hf://$NAMESPACE/model-name" --output-dir ./downloaded_model
 ```
 
 If `model_info.json` has a `files_url` without revision, extract it from the `model_name` field:
 ```bash
-# model_name: "anemo-rhoai/model-name@1.0"
+# model_name: "$NAMESPACE/model-name@1.0"
 # Extract @1.0 and append to files_url
-python download_model_from_datastore.py --files-url "hf://anemo-rhoai/model-name@1.0" --output-dir ./downloaded_model
+python download_model_from_datastore.py --files-url "hf://$NAMESPACE/model-name@1.0" --output-dir ./downloaded_model
 ```
 
 **Problem**: Model not found in DataStore.
@@ -201,7 +202,7 @@ If the customizer service is not responding:
 
 ```bash
 # Check pod status
-oc get pods -n anemo-rhoai | grep nemocustomizer-sample
+oc get pods -n $NAMESPACE | grep nemocustomizer-sample
 
 # Check service
 oc get svc nemocustomizer-sample -n anemo-rhoai
@@ -214,8 +215,8 @@ oc logs -n anemo-rhoai -l app.kubernetes.io/name=nemocustomizer-sample --tail=50
 
 If you see connection errors:
 - Verify you're running the notebook from within the cluster (Workbench/Notebook)
-- Check the namespace matches your deployment: `oc get nemocustomizer -n anemo-rhoai`
-- Verify service names match: `oc get svc -n anemo-rhoai | grep customizer`
+- Check the namespace matches your deployment: `oc get nemocustomizer -n $NAMESPACE`
+- Verify service names match: `oc get svc -n $NAMESPACE | grep customizer`
 
 ## Workflow Overview
 
@@ -251,7 +252,7 @@ Execute `customize-model.ipynb` to train/customize your model:
 ```
 
 **Expected Output:**
-- Customized model name (e.g., `anemo-rhoai/llama-3.2-1b-instruct-custom-1234567890-12345@1.0`)
+- Customized model name (e.g., `$NAMESPACE/llama-3.2-1b-instruct-custom-1234567890-12345@1.0`)
 - Job completion status
 - Model automatically exported to DataStore by EntityHandler (with `@1.0` revision)
 - Model metadata registered in Entity Store (if EntityHandler completed successfully)
@@ -266,7 +267,7 @@ After training completes, you need to export the model from Entity Store/DataSto
 
 **Using Python Script:**
 ```bash
-python export_model_from_entity_store.py --model-name "anemo-rhoai/llama-3.2-1b-instruct-custom-1234567890-12345@1.0"
+python export_model_from_entity_store.py --model-name "$NAMESPACE/llama-3.2-1b-instruct-custom-1234567890-12345@1.0"
 ```
 
 This will:
@@ -292,7 +293,7 @@ import os
 
 NMS_NAMESPACE = os.getenv("NMS_NAMESPACE", "anemo-rhoai")
 ENTITY_STORE_URL = f"http://nemoentitystore-sample.{NMS_NAMESPACE}.svc.cluster.local:8000"
-CUSTOMIZED_MODEL_NAME = "anemo-rhoai/llama-3.2-1b-instruct-custom-1234567890-12345@1.0"  # From training notebook
+CUSTOMIZED_MODEL_NAME = "$NAMESPACE/llama-3.2-1b-instruct-custom-1234567890-12345@1.0"  # From training notebook
 
 # Parse model name
 if "@" in CUSTOMIZED_MODEL_NAME:
@@ -329,10 +330,10 @@ python download_model_from_datastore.py --model-info model_info.json --output-di
 Or specify files_url directly (include revision if present):
 ```bash
 # With revision (recommended - EntityHandler exports models with @1.0 revision)
-python download_model_from_datastore.py --files-url "hf://anemo-rhoai/llama-3.2-1b-instruct-custom-1234567890-12345@1.0" --output-dir ./downloaded_model
+python download_model_from_datastore.py --files-url "hf://$NAMESPACE/llama-3.2-1b-instruct-custom-1234567890-12345@1.0" --output-dir ./downloaded_model
 
 # Without revision (will try to download from default branch)
-python download_model_from_datastore.py --files-url "hf://anemo-rhoai/model-name" --output-dir ./downloaded_model
+python download_model_from_datastore.py --files-url "hf://$NAMESPACE/model-name" --output-dir ./downloaded_model
 ```
 
 **Important Notes:**
@@ -355,7 +356,7 @@ NDS_TOKEN = os.getenv("NDS_TOKEN", "token")
 
 # files_url format: hf://{namespace}/{repo_name}@1.0 (EntityHandler adds @1.0 revision)
 # Or: hf://models/{namespace}/{repo_name}@1.0
-files_url = "hf://anemo-rhoai/llama-3.2-1b-instruct-custom-1234567890-12345@1.0"  # From Step 2.1
+files_url = "hf://$NAMESPACE/llama-3.2-1b-instruct-custom-1234567890-12345@1.0"  # From Step 2.1
 
 # Parse files_url to extract repo info and revision
 path = files_url.replace("hf://", "")
@@ -436,7 +437,7 @@ from botocore.client import Config
 import os
 
 # MinIO configuration (from secret)
-MINIO_ENDPOINT = "http://minio-service.anemo-rhoai.svc.cluster.local:9000"  # Update with your endpoint
+MINIO_ENDPOINT = "http://minio-service.<namespace>.svc.cluster.local:9000"  # Update with your endpoint
 MINIO_BUCKET = "your-bucket-name"  # From secret
 MINIO_ACCESS_KEY = "your-access-key"  # From secret
 MINIO_SECRET_KEY = "your-secret-key"  # From secret
@@ -474,8 +475,10 @@ print(f"\n✅ Model uploaded to MinIO at: {TARGET_MINIO_PATH}")
 If updating an existing InferenceService to use the new model:
 
 ```bash
+export NAMESPACE=<your-namespace>   # set your OpenShift project/namespace
+
 # Update InferenceService storage path
-oc patch inferenceservice anemo-rhoai-model-ssr -n anemo-rhoai --type='json' -p='[
+oc patch inferenceservice <inferenceservice-name> -n $NAMESPACE --type='json' -p='[
   {
     "op": "replace",
     "path": "/spec/predictor/model/storage/path",
@@ -484,7 +487,7 @@ oc patch inferenceservice anemo-rhoai-model-ssr -n anemo-rhoai --type='json' -p=
 ]'
 
 # Restart the InferenceService pod to load new model
-oc delete pod -n anemo-rhoai -l serving.kserve.io/inferenceservice=anemo-rhoai-model-ssr
+oc delete pod -n $NAMESPACE -l serving.kserve.io/inferenceservice=<inferenceservice-name>
 ```
 
 Or create a new InferenceService pointing to the custom model path.
@@ -523,7 +526,7 @@ If you have access to MinIO web console:
 # Download from: https://min.io/download
 
 # Configure mc
-mc alias set myminio http://minio-service.anemo-rhoai.svc.cluster.local:9000 ACCESS_KEY SECRET_KEY
+mc alias set myminio http://minio-service.<namespace>.svc.cluster.local:9000 ACCESS_KEY SECRET_KEY
 
 # Upload downloaded model files
 mc cp -r /path/to/downloaded/model/* myminio/your-bucket/models/llama-3.2-1b-instruct-custom/

@@ -8,7 +8,7 @@
 
 set -euo pipefail
 
-NAMESPACE="${1:-${NAMESPACE:-anemo-rhoai}}"
+NAMESPACE="${1:-${NAMESPACE:-your-namespace}}"
 PIDS_FILE="/tmp/nemo_port_forwards_${NAMESPACE}.pids"
 
 echo "=========================================="
