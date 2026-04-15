@@ -16,7 +16,7 @@ Helm charts for deploying NVIDIA NeMo microservices infrastructure and demos on 
 
 ## Storage requirements
 
-Plan and allocate persistent storage for the following. Default sizes are from the Helm chart values; adjust in `values.yaml` (or `values.yaml.sample`) as needed.
+Plan and allocate persistent storage for the following. Default sizes are from the Helm chart values; adjust in `values.yaml` as needed.
 
 | Component | Purpose | Default size | Notes |
 |-----------|---------|--------------|--------|
@@ -40,7 +40,7 @@ To use this repo with your own environment, set configuration in a few places in
 
 | What | Where | Set to |
 |------|--------|--------|
-| **Deployment namespace** | `deploy/nemo-infra/values.yaml` and `deploy/nemo-instances/values.yaml` (copy from `values.yaml.sample`) | Your OpenShift project name |
+| **Deployment namespace** | `deploy/nemo-infra/values.yaml` and `deploy/nemo-instances/values.yaml` | Your OpenShift project name |
 | **Service URLs / InferenceService** | Helm `values.yaml` (e.g. `llamastack.inferenceServiceName`), or RHOAI YAML (e.g. `deploy/rhoai/copilot-llama-stack.yaml` `VLLM_URL`) | Your InferenceService name and namespace |
 | **Demos and notebooks** | `env.donotcommit` in each demo (copy from `env.donotcommit.example`) | `NMS_NAMESPACE`, `NIM_CHAT_URL` / `NIM_MODEL_SERVING_URL_EXTERNAL`, tokens as needed |
 
