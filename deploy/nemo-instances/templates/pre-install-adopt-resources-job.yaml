@@ -1,0 +1,124 @@
+# Pre-install/pre-upgrade job to adopt existing NeMo CRDs and cluster resources into Helm
+# This prevents "resource already exists" errors when resources were previously installed
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nemo-instances-adopt-resources
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app.kubernetes.io/name: nemo-instances
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: pre-install-adopt
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-15"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 3
+  template:
+    metadata:
+      name: nemo-instances-adopt-resources
+    spec:
+      serviceAccountName: nemo-instances-adopt-sa
+      restartPolicy: OnFailure
+      containers:
+      - name: adopt-resources
+        image: registry.redhat.io/openshift4/ose-cli:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+
+          echo "=== Deleting Existing NeMo CRDs ==="
+          echo "Note: CRDs will be recreated by Helm to avoid field manager conflicts"
+
+          NEMO_CRDS=$(oc get crds -o json 2>/dev/null | \
+            jq -r '.items[] | select(.spec.group=="apps.nvidia.com") | .metadata.name' 2>/dev/null || echo "")
+
+          if [ -z "$NEMO_CRDS" ]; then
+            echo "No existing NeMo CRDs found"
+          else
+            for crd in $NEMO_CRDS; do
+              echo "Deleting CRD: $crd"
+              oc delete crd "$crd" 2>/dev/null || echo "  Failed to delete $crd"
+              sleep 2
+            done
+            echo "NeMo CRDs deletion complete - Helm will recreate them"
+          fi
+
+          echo ""
+          echo "=== Adopting nemo-instances Cluster Resources ==="
+
+          # Adopt ClusterRoles
+          CLUSTER_ROLES=$(oc get clusterroles -o json 2>/dev/null | \
+            jq -r '.items[] | select(.metadata.name | contains("nemo-instances") or contains("nemo-operator") or contains("nim-operator")) | .metadata.name' 2>/dev/null || echo "")
+
+          for resource in $CLUSTER_ROLES; do
+            echo "Adopting ClusterRole: $resource"
+            oc patch clusterrole "$resource" --type=json \
+              -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' 2>/dev/null || true
+            oc annotate clusterrole "$resource" \
+              meta.helm.sh/release-name={{ .Release.Name }} \
+              meta.helm.sh/release-namespace={{ .Values.namespace.name }} \
+              --overwrite 2>/dev/null || true
+            oc label clusterrole "$resource" app.kubernetes.io/managed-by=Helm --overwrite 2>/dev/null || true
+          done
+
+          # Adopt ClusterRoleBindings
+          CLUSTER_ROLE_BINDINGS=$(oc get clusterrolebindings -o json 2>/dev/null | \
+            jq -r '.items[] | select(.metadata.name | contains("nemo-instances") or contains("nemo-operator") or contains("nim-operator")) | .metadata.name' 2>/dev/null || echo "")
+
+          for resource in $CLUSTER_ROLE_BINDINGS; do
+            echo "Adopting ClusterRoleBinding: $resource"
+            oc patch clusterrolebinding "$resource" --type=json \
+              -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' 2>/dev/null || true
+            oc annotate clusterrolebinding "$resource" \
+              meta.helm.sh/release-name={{ .Release.Name }} \
+              meta.helm.sh/release-namespace={{ .Values.namespace.name }} \
+              --overwrite 2>/dev/null || true
+            oc label clusterrolebinding "$resource" app.kubernetes.io/managed-by=Helm --overwrite 2>/dev/null || true
+          done
+
+          # Adopt ValidatingWebhookConfigurations
+          WEBHOOKS=$(oc get validatingwebhookconfigurations -o json 2>/dev/null | \
+            jq -r '.items[] | select(.metadata.name | contains("nemo-instances") or contains("nemo-operator") or contains("nim-operator")) | .metadata.name' 2>/dev/null || echo "")
+
+          for resource in $WEBHOOKS; do
+            echo "Adopting ValidatingWebhookConfiguration: $resource"
+            oc annotate validatingwebhookconfiguration "$resource" \
+              meta.helm.sh/release-name={{ .Release.Name }} \
+              meta.helm.sh/release-namespace={{ .Values.namespace.name }} \
+              --overwrite 2>/dev/null || true
+            oc label validatingwebhookconfiguration "$resource" app.kubernetes.io/managed-by=Helm --overwrite 2>/dev/null || true
+          done
+
+          # Adopt MutatingWebhookConfigurations
+          MUTATING_WEBHOOKS=$(oc get mutatingwebhookconfigurations -o json 2>/dev/null | \
+            jq -r '.items[] | select(.metadata.name | contains("nemo-instances") or contains("nemo-operator") or contains("nim-operator")) | .metadata.name' 2>/dev/null || echo "")
+
+          for resource in $MUTATING_WEBHOOKS; do
+            echo "Adopting MutatingWebhookConfiguration: $resource"
+            oc annotate mutatingwebhookconfiguration "$resource" \
+              meta.helm.sh/release-name={{ .Release.Name }} \
+              meta.helm.sh/release-namespace={{ .Values.namespace.name }} \
+              --overwrite 2>/dev/null || true
+            oc label mutatingwebhookconfiguration "$resource" app.kubernetes.io/managed-by=Helm --overwrite 2>/dev/null || true
+          done
+
+          # Adopt SecurityContextConstraints (OpenShift-specific)
+          SCCS=$(oc get scc -o json 2>/dev/null | \
+            jq -r '.items[] | select(.metadata.name | contains("nemo") or contains("nim")) | .metadata.name' 2>/dev/null || echo "")
+
+          for resource in $SCCS; do
+            echo "Adopting SecurityContextConstraints: $resource"
+            oc annotate scc "$resource" \
+              meta.helm.sh/release-name={{ .Release.Name }} \
+              meta.helm.sh/release-namespace={{ .Values.namespace.name }} \
+              --overwrite 2>/dev/null || true
+            oc label scc "$resource" app.kubernetes.io/managed-by=Helm --overwrite 2>/dev/null || true
+          done
+
+          echo ""
+          echo "✓ Resource adoption complete"

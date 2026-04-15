@@ -33,4 +33,4 @@ dependencies:
   repository: https://volcano-sh.github.io/helm-charts
   version: 1.13.1
 digest: sha256:8b88a79fa228aa34f601ea8ab8d9d2224acf2a424d23d8694e9cb46482d85bc7
-generated: "2026-01-21T11:31:38.902332-05:00"
+generated: "2026-04-15T21:47:42.163671+03:00"

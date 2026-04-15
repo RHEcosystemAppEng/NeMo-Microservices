@@ -1,0 +1,58 @@
+# Post-install/post-upgrade job to bind nemocustomizer-sample SA to nemo-customizer-scc
+# This ensures customizer training jobs have proper permissions
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nemo-instances-bind-scc
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app.kubernetes.io/name: nemo-instances
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: post-install-scc
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 5
+  template:
+    metadata:
+      name: nemo-instances-bind-scc
+    spec:
+      serviceAccountName: nemo-instances-scc-bind-sa
+      restartPolicy: OnFailure
+      containers:
+      - name: bind-scc
+        image: registry.redhat.io/openshift4/ose-cli:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+
+          echo "Waiting for nemocustomizer-sample service account to be created..."
+          timeout=120
+          elapsed=0
+          while ! oc get sa nemocustomizer-sample -n {{ .Values.namespace.name }} &>/dev/null; do
+            if [ $elapsed -ge $timeout ]; then
+              echo "ERROR: Timeout waiting for nemocustomizer-sample service account"
+              exit 1
+            fi
+            sleep 5
+            elapsed=$((elapsed + 5))
+          done
+
+          echo "Service account found. Binding to nemo-customizer-scc..."
+
+          # Check if SCC exists
+          if ! oc get scc nemo-customizer-scc &> /dev/null; then
+            echo "ERROR: nemo-customizer-scc not found"
+            echo "Please ensure nemo-infra chart includes the SCC"
+            exit 1
+          fi
+
+          oc adm policy add-scc-to-user nemo-customizer-scc \
+            -z nemocustomizer-sample -n {{ .Values.namespace.name }} || echo "  Already bound or failed"
+
+          echo "✓ Successfully bound nemocustomizer-sample to nemo-customizer-scc"

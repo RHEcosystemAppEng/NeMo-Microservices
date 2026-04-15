@@ -1,0 +1,76 @@
+{{- if .Values.evaluator.enabled }}
+# Workaround for NIM Operator v3.0.2 bug where EVALUATOR_IMAGE env var
+# is not propagated to init containers (only EVAL_CONTAINER is set).
+# This job patches the nemoevaluator deployment to add EVALUATOR_IMAGE
+# to the evaluator-db-migration init container.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: patch-evaluator-init-container
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app.kubernetes.io/name: nemo-instances
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: evaluator-patch
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 5
+  template:
+    metadata:
+      name: patch-evaluator-init-container
+    spec:
+      serviceAccountName: evaluator-patch-sa
+      restartPolicy: OnFailure
+      containers:
+      - name: patch
+        image: registry.redhat.io/openshift4/ose-cli:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+
+          echo "Waiting for nemoevaluator deployment to be created..."
+          timeout=120
+          elapsed=0
+          while ! oc get deployment nemoevaluator-sample -n {{ .Values.namespace.name }} &>/dev/null; do
+            if [ $elapsed -ge $timeout ]; then
+              echo "ERROR: Timeout waiting for nemoevaluator deployment"
+              exit 1
+            fi
+            sleep 5
+            elapsed=$((elapsed + 5))
+          done
+
+          echo "Deployment found. Checking if patch is needed..."
+
+          # Check if EVALUATOR_IMAGE is already in the init container
+          if oc get deployment nemoevaluator-sample -n {{ .Values.namespace.name }} \
+             -o jsonpath='{.spec.template.spec.initContainers[?(@.name=="evaluator-db-migration")].env[?(@.name=="EVALUATOR_IMAGE")].name}' \
+             | grep -q "EVALUATOR_IMAGE"; then
+            echo "EVALUATOR_IMAGE already set in init container. Patch not needed."
+            exit 0
+          fi
+
+          echo "Patching nemoevaluator deployment to add EVALUATOR_IMAGE to init container..."
+
+          oc patch deployment nemoevaluator-sample -n {{ .Values.namespace.name }} --type='json' -p='[
+            {
+              "op": "add",
+              "path": "/spec/template/spec/initContainers/1/env/-",
+              "value": {
+                "name": "EVALUATOR_IMAGE",
+                "value": "{{ printf "%s:%s" .Values.evaluator.image.repository .Values.evaluator.image.tag }}"
+              }
+            }
+          ]'
+
+          echo "Patch applied successfully. Waiting for rollout..."
+          oc rollout status deployment/nemoevaluator-sample -n {{ .Values.namespace.name }} --timeout=300s
+
+          echo "Evaluator deployment patched and rolled out successfully"
+{{- end }}

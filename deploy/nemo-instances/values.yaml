@@ -9,7 +9,7 @@
 
 # Installation namespace (replace with your OpenShift project/namespace)
 namespace:
-  name: your-namespace
+  name: hacohen-flywheel
 
 # Component installation flags
 install:
@@ -159,7 +159,7 @@ datastore:
     adminUsername: "datastore_admin"
     adminPassword: "CHANGE_ME"  # Replace with secure password
   # LFS JWT secret (generate with: openssl rand -base64 32 | base64)
-  lfsJwtSecret: "CHANGE_ME_BASE64"  # Replace with your base64-encoded secret
+  lfsJwtSecret: "k2h/OcO9HshQU5sI2XlC4RvcA3DzH4sbsxTfU6/oNz0="  # Base64-encoded random secret
 
 # ===== NemoEntitystore Configuration =====
 # Image: nvcr.io/nvidia/nemo-microservices/entity-store:25.12
@@ -236,7 +236,10 @@ evaluator:
     # Path (e.g., "/v1" for KServe InferenceService)
     path: ""
     # Port for NIM/KServe service (80 for KServe InferenceService, 8000 for NIMPipeline)
-    port: "80"
+    port: "8000"  # Changed from "80" - default for NIMPipeline deployments
+  # Patch job configuration (workaround for NIM Operator v3.0.2 init container env var bug)
+  patchJob:
+    serviceAccount: evaluator-patch-sa
   replicas: 1
 
 # ===== NemoGuardrail Configuration =====
@@ -275,6 +278,12 @@ guardrail:
     limits:
       cpu: "1"
       ephemeral-storage: 10Gi
+
+# ===== Optional Model Deployments =====
+# Control deployment of embedding and retriever models (disabled by default to save GPU resources)
+# Enable these for RAG (Retrieval-Augmented Generation) demos
+deployEmbeddingModel: false  # Controls nimCacheEmbedding + nimPipelineEmbedding (1 GPU)
+deployRetrieverModel: false  # Controls nimCacheRetriever + nimPipelineRetriever (1 GPU)
 
 # ===== NIMCache Configuration (Chat Model) =====
 # Model: nvcr.io/nim/meta/llama-3.2-1b-instruct:1.8.3 (chat model for inference)
