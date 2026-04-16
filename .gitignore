@@ -67,3 +67,4 @@ demos/llamastack/Llama_Stack_NVIDIA_E2E_Flow_include_outputs.ipynb
 # Helm values (may contain sensitive URLs and credentials)
 deploy/nemo-infra/values.yaml
 deploy/nemo-instances/values.yaml
+clear_namespace.sh
