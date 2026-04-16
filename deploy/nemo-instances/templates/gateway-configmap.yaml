@@ -1,0 +1,148 @@
+{{- if .Values.gateway.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.gateway.name }}-config
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app.kubernetes.io/name: nemo-instances
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: gateway
+    app: {{ .Values.gateway.name }}
+data:
+  nginx.conf: |
+    events {
+      worker_connections {{ .Values.gateway.nginx.workerConnections }};
+    }
+
+    http {
+      # OpenShift internal DNS resolver
+      resolver {{ .Values.gateway.nginx.resolver }} valid={{ .Values.gateway.nginx.resolverValid }};
+
+      # Enable access logging
+      access_log /var/log/nginx/access.log;
+      error_log /var/log/nginx/error.log;
+
+      # Allow large file uploads for Git LFS and dataset uploads
+      client_max_body_size {{ .Values.gateway.nginx.clientMaxBodySize }};
+
+      server {
+        listen {{ .Values.gateway.service.targetPort }};
+
+        # Health check endpoint for the gateway itself
+        location /healthz {
+          return 200 'OK';
+          add_header Content-Type text/plain;
+        }
+
+        # Route to Entity Store (Dataset metadata registration)
+        location /v1/datasets {
+          set $upstream_entitystore {{ .Values.gateway.services.entitystore.name }}.{{ .Values.namespace.name }}.svc.cluster.local:{{ .Values.gateway.services.entitystore.port }};
+          proxy_pass http://$upstream_entitystore;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Route to Customizer (Fine-tuning jobs, LoRA configs)
+        location /v1/customization {
+          set $upstream_customizer {{ .Values.gateway.services.customizer.name }}.{{ .Values.namespace.name }}.svc.cluster.local:{{ .Values.gateway.services.customizer.port }};
+          proxy_pass http://$upstream_customizer;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Route to Evaluator (Model evaluation jobs)
+        location /v1/evaluation {
+          set $upstream_evaluator {{ .Values.gateway.services.evaluator.name }}.{{ .Values.namespace.name }}.svc.cluster.local:{{ .Values.gateway.services.evaluator.port }};
+          proxy_pass http://$upstream_evaluator;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Route to Guardrails (Safety filters)
+        location /v1/guardrails {
+          set $upstream_guardrail {{ .Values.gateway.services.guardrail.name }}.{{ .Values.namespace.name }}.svc.cluster.local:{{ .Values.gateway.services.guardrail.port }};
+          proxy_pass http://$upstream_guardrail;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Route to Entity Store (Model metadata, PEFT models)
+        location /v1/entity-store {
+          set $upstream_entitystore {{ .Values.gateway.services.entitystore.name }}.{{ .Values.namespace.name }}.svc.cluster.local:{{ .Values.gateway.services.entitystore.port }};
+          proxy_pass http://$upstream_entitystore;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Route for namespaces (needed by Data Flywheel - routes to Entity Store)
+        location /v1/namespaces {
+          set $upstream_entitystore {{ .Values.gateway.services.entitystore.name }}.{{ .Values.namespace.name }}.svc.cluster.local:{{ .Values.gateway.services.entitystore.port }};
+          proxy_pass http://$upstream_entitystore;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Route for datastore namespace operations
+        location /v1/datastore {
+          set $upstream_datastore {{ .Values.gateway.services.datastore.name }}.{{ .Values.namespace.name }}.svc.cluster.local:{{ .Values.gateway.services.datastore.port }};
+          proxy_pass http://$upstream_datastore;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Route for HuggingFace API (through Datastore)
+        location /v1/hf {
+          set $upstream_datastore {{ .Values.gateway.services.datastore.name }}.{{ .Values.namespace.name }}.svc.cluster.local:{{ .Values.gateway.services.datastore.port }};
+          proxy_pass http://$upstream_datastore;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Route Git/LFS operations to Datastore (for HuggingFace Hub compatibility)
+        # Matches paths like: /{namespace}/{repo}.git/info/lfs/...
+        location ~ ^/[^/]+/.+\.git/ {
+          set $upstream_datastore {{ .Values.gateway.services.datastore.name }}.{{ .Values.namespace.name }}.svc.cluster.local:{{ .Values.gateway.services.datastore.port }};
+          proxy_pass http://$upstream_datastore;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Route all model metadata operations to Entity Store
+        # This includes model registration (POST), listing (GET), retrieval (GET), updates (PUT), and deletion (DELETE)
+        # NO MOCK ENDPOINTS - all model requests go to entity store
+        location ~ ^/v1/models {
+          set $upstream_entitystore {{ .Values.gateway.services.entitystore.name }}.{{ .Values.namespace.name }}.svc.cluster.local:{{ .Values.gateway.services.entitystore.port }};
+          proxy_pass http://$upstream_entitystore;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Default catch-all (return 404 for unknown paths)
+        location / {
+          return 404 '{"error": "Not Found - use /v1/* endpoints for NeMo services or Git repository paths"}';
+          add_header Content-Type application/json;
+        }
+      }
+    }
+{{- end }}

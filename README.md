@@ -150,15 +150,25 @@ Before deploying NeMo instances, create the required secrets:
 export NGC_API_KEY="<YOUR_NGC_API_KEY>"
 
 # NGC Image Pull Secret (for pulling images)
-oc create secret docker-registry ngc-secret \
+oc create secret docker-registry nvcrimagepullsecret \
   --docker-server=nvcr.io \
   --docker-username='$oauthtoken' \
   --docker-password=$NGC_API_KEY \
   -n <namespace>
 
 # NGC API Secret (for model downloads)
-oc create secret generic ngc-api-secret \
+oc create secret generic ngc-api \
   --from-literal=NGC_API_KEY=$NGC_API_KEY \
+  -n <namespace>
+
+# NVIDIA API Secret (for NVIDIA API catalog and remote LLM judge)
+oc create secret generic nvidia-api \
+  --from-literal=NVIDIA_API_KEY=$NVIDIA_API_KEY \
+  -n <namespace>
+
+# Hugging Face Token Secret (for HF model/dataset access)
+oc create secret generic hf-secret \
+  --from-literal=HF_TOKEN=$HF_TOKEN \
   -n <namespace>
 ```
 

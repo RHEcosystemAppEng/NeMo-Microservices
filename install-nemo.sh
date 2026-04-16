@@ -270,14 +270,14 @@ install_nemo_instances() {
     rm -rf charts/*.tgz Chart.lock 2>/dev/null || true
     helm dependency update
 
-    # Install nemo-instances (LlamaStack disabled initially)
+    # Install nemo-instances (LlamaStack disabled initially, Gateway enabled)
     # Note: Helm hooks will automatically:
     #   - Delete and recreate NeMo CRDs (pre-install hook)
     #   - Adopt existing cluster resources (pre-install hook)
     #   - Patch nim-operator RBAC for Gateway API (post-install hook)
     #   - Patch evaluator deployment for EVALUATOR_IMAGE (post-install hook)
     #   - Bind customizer SA to SCC (post-install hook)
-    log_info "Installing nemo-instances Helm chart..."
+    log_info "Installing nemo-instances Helm chart with NeMo Gateway..."
     log_info "Helm pre/post-install hooks will handle:"
     log_info "  - CRD adoption and resource patching"
     log_info "  - NIM Operator RBAC patching"
@@ -285,7 +285,8 @@ install_nemo_instances() {
     log_info "  - SCC binding for customizer"
     helm install nemo-instances . -n "$NAMESPACE" \
         -f values.yaml \
-        --set llamastack.enabled=false
+        --set llamastack.enabled=false \
+        --set gateway.enabled=true
 
     log_success "nemo-instances installed"
 
@@ -302,9 +303,9 @@ install_nemo_instances() {
     sleep 30  # Give pods time to start
 
     log_info "Checking NeMo service status..."
-    oc get pods -n "$NAMESPACE" | grep -E "nemo(datastore|entitystore|customizer|evaluator|guardrail)|llama3-1b|embedqa"
+    oc get pods -n "$NAMESPACE" | grep -E "nemo(datastore|entitystore|customizer|evaluator|guardrail|gateway)|llama3-1b|embedqa"
 
-    log_success "nemo-instances is ready"
+    log_success "nemo-instances with gateway is ready"
 }
 
 # Function to verify installation
@@ -341,6 +342,7 @@ display_next_steps() {
     echo "  ✅ NeMo Infrastructure (nemo-infra)"
     echo "  ✅ NeMo Services (customizer, datastore, entitystore, evaluator, guardrails)"
     echo "  ✅ Chat Model NIM: meta-llama3-1b-instruct"
+    echo "  ✅ NeMo Gateway (unified API endpoint)"
     echo ""
     log_info "Shared secrets created (compatible with Data Flywheel):"
     echo "  ✅ nvcrimagepullsecret (Docker registry auth)"
@@ -349,6 +351,7 @@ display_next_steps() {
     echo "  ✅ hf-secret (Hugging Face Token)"
     echo ""
     log_info "Service URLs (cluster-internal):"
+    echo "  • Gateway:        http://nemo-gateway.$NAMESPACE.svc.cluster.local (unified endpoint)"
     echo "  • Chat Model:     http://meta-llama3-1b-instruct.$NAMESPACE.svc.cluster.local:8000"
     echo "  • Data Store:     http://nemodatastore-sample.$NAMESPACE.svc.cluster.local:8000"
     echo "  • Entity Store:   http://nemoentitystore-sample.$NAMESPACE.svc.cluster.local:8000"
@@ -360,14 +363,20 @@ display_next_steps() {
     echo "  To enable embedding model: helm upgrade nemo-instances deploy/nemo-instances -n $NAMESPACE --set deployEmbeddingModel=true"
     echo "  To enable retriever model: helm upgrade nemo-instances deploy/nemo-instances -n $NAMESPACE --set deployRetrieverModel=true"
     echo ""
+    log_info "Gateway Usage:"
+    echo "  Access all NeMo services through the unified gateway endpoint:"
+    echo "    http://nemo-gateway.$NAMESPACE.svc.cluster.local"
+    echo ""
     log_info "Ready to deploy NVIDIA Data Flywheel:"
     echo "  The secrets required by Data Flywheel have been created."
-    echo "  You can now install Data Flywheel using Helm on top of this NeMo deployment."
+    echo "  Configure Data Flywheel to use the gateway:"
+    echo "    nemo_base_url: http://nemo-gateway"
+    echo "    datastore_base_url: http://nemo-gateway"
     echo ""
     log_info "For manual installation (without this script):"
     echo "  1. Create namespace and secrets"
     echo "  2. helm install nemo-infra deploy/nemo-infra -n $NAMESPACE -f deploy/nemo-infra/values.yaml"
-    echo "  3. helm install nemo-instances deploy/nemo-instances -n $NAMESPACE -f deploy/nemo-instances/values.yaml --set llamastack.enabled=false"
+    echo "  3. helm install nemo-instances deploy/nemo-instances -n $NAMESPACE -f deploy/nemo-instances/values.yaml --set llamastack.enabled=false --set gateway.enabled=true"
     echo ""
 }
 

@@ -636,3 +636,51 @@ nim-operator:
       requests:
         memory: 256Mi
 
+# ===== NeMo Gateway Configuration =====
+# NGINX-based reverse proxy providing unified routing to NeMo Microservices
+# Optional component - disabled by default
+gateway:
+  enabled: false  # Set to true to deploy NeMo Gateway
+  name: nemo-gateway
+  image:
+    repository: nginx
+    tag: "1.25-alpine"
+    pullPolicy: IfNotPresent
+  # Note: Always use 1 replica for gateway (no replication needed)
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+  # NGINX configuration
+  nginx:
+    # OpenShift internal DNS resolver
+    resolver: "172.30.0.10"
+    resolverValid: "30s"
+    # Allow large file uploads for Git LFS and dataset uploads
+    clientMaxBodySize: "100M"
+    # Worker connections
+    workerConnections: 1024
+  # Service routing configuration (defaults use -sample service names)
+  services:
+    customizer:
+      name: nemocustomizer-sample
+      port: 8000
+    datastore:
+      name: nemodatastore-sample
+      port: 8000
+    entitystore:
+      name: nemoentitystore-sample
+      port: 8000
+    evaluator:
+      name: nemoevaluator-sample
+      port: 8000
+    guardrail:
+      name: nemoguardrails-sample
+      port: 8000
