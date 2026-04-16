@@ -121,4 +121,49 @@ spec:
           done
 
           echo ""
+          echo "=== Adopting Gateway Resources (if enabled) ==="
+          {{- if .Values.gateway.enabled }}
+
+          # Adopt gateway Deployment
+          if oc get deployment {{ .Values.gateway.name }} -n {{ .Values.namespace.name }} &>/dev/null; then
+            echo "Adopting gateway Deployment: {{ .Values.gateway.name }}"
+            oc patch deployment {{ .Values.gateway.name }} -n {{ .Values.namespace.name }} --type=json \
+              -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' 2>/dev/null || true
+            oc annotate deployment {{ .Values.gateway.name }} -n {{ .Values.namespace.name }} \
+              meta.helm.sh/release-name={{ .Release.Name }} \
+              meta.helm.sh/release-namespace={{ .Values.namespace.name }} \
+              --overwrite 2>/dev/null || true
+            oc label deployment {{ .Values.gateway.name }} -n {{ .Values.namespace.name }} \
+              app.kubernetes.io/managed-by=Helm --overwrite 2>/dev/null || true
+          fi
+
+          # Adopt gateway Service
+          if oc get service {{ .Values.gateway.name }} -n {{ .Values.namespace.name }} &>/dev/null; then
+            echo "Adopting gateway Service: {{ .Values.gateway.name }}"
+            oc patch service {{ .Values.gateway.name }} -n {{ .Values.namespace.name }} --type=json \
+              -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' 2>/dev/null || true
+            oc annotate service {{ .Values.gateway.name }} -n {{ .Values.namespace.name }} \
+              meta.helm.sh/release-name={{ .Release.Name }} \
+              meta.helm.sh/release-namespace={{ .Values.namespace.name }} \
+              --overwrite 2>/dev/null || true
+            oc label service {{ .Values.gateway.name }} -n {{ .Values.namespace.name }} \
+              app.kubernetes.io/managed-by=Helm --overwrite 2>/dev/null || true
+          fi
+
+          # Adopt gateway ConfigMap
+          if oc get configmap {{ .Values.gateway.name }}-config -n {{ .Values.namespace.name }} &>/dev/null; then
+            echo "Adopting gateway ConfigMap: {{ .Values.gateway.name }}-config"
+            oc patch configmap {{ .Values.gateway.name }}-config -n {{ .Values.namespace.name }} --type=json \
+              -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' 2>/dev/null || true
+            oc annotate configmap {{ .Values.gateway.name }}-config -n {{ .Values.namespace.name }} \
+              meta.helm.sh/release-name={{ .Release.Name }} \
+              meta.helm.sh/release-namespace={{ .Values.namespace.name }} \
+              --overwrite 2>/dev/null || true
+            oc label configmap {{ .Values.gateway.name }}-config -n {{ .Values.namespace.name }} \
+              app.kubernetes.io/managed-by=Helm --overwrite 2>/dev/null || true
+          fi
+
+          {{- end }}
+
+          echo ""
           echo "✓ Resource adoption complete"
