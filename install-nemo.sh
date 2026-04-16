@@ -75,7 +75,9 @@ load_env_variables() {
     if [ ! -f "$ENV_FILE" ]; then
         log_error ".env file not found at $ENV_FILE"
         log_error "Please create a .env file in the NeMo-Microservices root with the following variables:"
-        log_error "  NGC_API_KEY=\"your-api-key\""
+        log_error "  NGC_API_KEY=\"your-ngc-api-key\""
+        log_error "  NVIDIA_API_KEY=\"your-nvidia-api-key\""
+        log_error "  HF_TOKEN=\"your-hf-token\""
         log_error "  NAMESPACE=\"your-namespace\""
         exit 1
     fi
@@ -88,6 +90,18 @@ load_env_variables() {
     # Validate required variables
     if [ -z "$NGC_API_KEY" ]; then
         log_error "NGC_API_KEY is not set in .env file"
+        exit 1
+    fi
+
+    if [ -z "$NVIDIA_API_KEY" ]; then
+        log_error "NVIDIA_API_KEY is not set in .env file"
+        log_error "Generate one at: https://build.nvidia.com"
+        exit 1
+    fi
+
+    if [ -z "$HF_TOKEN" ]; then
+        log_error "HF_TOKEN is not set in .env file"
+        log_error "Generate one at: https://huggingface.co/settings/tokens"
         exit 1
     fi
 
@@ -114,26 +128,37 @@ create_namespace() {
     oc project "$NAMESPACE"
 }
 
-# Function to create NGC secrets
-create_ngc_secrets() {
-    log_info "Creating NGC secrets..."
+# Function to create all required secrets for NeMo and Data Flywheel
+create_secrets() {
+    log_info "Creating secrets for NeMo Microservices and Data Flywheel..."
 
     # Delete existing secrets if they exist
-    oc delete secret ngc-secret ngc-api-secret -n "$NAMESPACE" --ignore-not-found=true
+    oc delete secret nvcrimagepullsecret ngc-api nvidia-api hf-secret \
+        -n "$NAMESPACE" --ignore-not-found=true
 
-    # Create NGC Image Pull Secret
-    oc create secret docker-registry ngc-secret \
+    # Create NGC Image Pull Secret (for nvcr.io registry)
+    oc create secret docker-registry nvcrimagepullsecret \
         --docker-server=nvcr.io \
         --docker-username='$oauthtoken' \
         --docker-password="$NGC_API_KEY" \
         -n "$NAMESPACE"
 
-    # Create NGC API Secret
-    oc create secret generic ngc-api-secret \
+    # Create NGC API Secret (for NeMo model access)
+    oc create secret generic ngc-api \
         --from-literal=NGC_API_KEY="$NGC_API_KEY" \
         -n "$NAMESPACE"
 
-    log_success "NGC secrets created"
+    # Create NVIDIA API Secret (for remote LLM judge and NVIDIA API catalog)
+    oc create secret generic nvidia-api \
+        --from-literal=NVIDIA_API_KEY="$NVIDIA_API_KEY" \
+        -n "$NAMESPACE"
+
+    # Create Hugging Face Token Secret (for HF model/dataset access)
+    oc create secret generic hf-secret \
+        --from-literal=HF_TOKEN="$HF_TOKEN" \
+        -n "$NAMESPACE"
+
+    log_success "All secrets created successfully (compatible with Data Flywheel)"
 }
 
 # Function to install nemo-infra
@@ -317,6 +342,12 @@ display_next_steps() {
     echo "  ✅ NeMo Services (customizer, datastore, entitystore, evaluator, guardrails)"
     echo "  ✅ Chat Model NIM: meta-llama3-1b-instruct"
     echo ""
+    log_info "Shared secrets created (compatible with Data Flywheel):"
+    echo "  ✅ nvcrimagepullsecret (Docker registry auth)"
+    echo "  ✅ ngc-api (NGC API Key)"
+    echo "  ✅ nvidia-api (NVIDIA API Key)"
+    echo "  ✅ hf-secret (Hugging Face Token)"
+    echo ""
     log_info "Service URLs (cluster-internal):"
     echo "  • Chat Model:     http://meta-llama3-1b-instruct.$NAMESPACE.svc.cluster.local:8000"
     echo "  • Data Store:     http://nemodatastore-sample.$NAMESPACE.svc.cluster.local:8000"
@@ -329,8 +360,12 @@ display_next_steps() {
     echo "  To enable embedding model: helm upgrade nemo-instances deploy/nemo-instances -n $NAMESPACE --set deployEmbeddingModel=true"
     echo "  To enable retriever model: helm upgrade nemo-instances deploy/nemo-instances -n $NAMESPACE --set deployRetrieverModel=true"
     echo ""
+    log_info "Ready to deploy NVIDIA Data Flywheel:"
+    echo "  The secrets required by Data Flywheel have been created."
+    echo "  You can now install Data Flywheel using Helm on top of this NeMo deployment."
+    echo ""
     log_info "For manual installation (without this script):"
-    echo "  1. Create namespace and NGC secrets"
+    echo "  1. Create namespace and secrets"
     echo "  2. helm install nemo-infra deploy/nemo-infra -n $NAMESPACE -f deploy/nemo-infra/values.yaml"
     echo "  3. helm install nemo-instances deploy/nemo-instances -n $NAMESPACE -f deploy/nemo-instances/values.yaml --set llamastack.enabled=false"
     echo ""
@@ -376,7 +411,7 @@ main() {
 
     # Execute installation steps
     create_namespace
-    create_ngc_secrets
+    create_secrets
     install_nemo_infra
     install_nemo_instances
     verify_installation

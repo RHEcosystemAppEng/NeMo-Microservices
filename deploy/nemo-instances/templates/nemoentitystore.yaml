@@ -10,7 +10,7 @@ spec:
     tag: {{ .Values.entitystore.image.tag | quote }}
     pullPolicy: {{ .Values.entitystore.image.pullPolicy }}
     pullSecrets:
-      - ngc-secret
+      - nvcrimagepullsecret
   expose:
     service:
       type: ClusterIP

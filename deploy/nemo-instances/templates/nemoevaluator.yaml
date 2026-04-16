@@ -20,7 +20,7 @@ spec:
     tag: {{ .Values.evaluator.image.tag | quote }}
     pullPolicy: {{ .Values.evaluator.image.pullPolicy }}
     pullSecrets:
-      - ngc-secret
+      - nvcrimagepullsecret
   expose:
     service:
       type: ClusterIP
