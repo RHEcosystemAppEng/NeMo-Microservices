@@ -126,6 +126,19 @@ data:
           proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # Mock deployment API for statically deployed NIMs
+        # Returns success for deployment requests since NIMs are pre-deployed via NeMo Operator
+        location ~ ^/v1/deployment/model-deployments/?$ {
+          default_type application/json;
+          return 200 '{"status": "success", "status_details": {"status": "ready"}, "message": "NIM deployment successful (pre-deployed)"}';
+        }
+
+        # Mock deployment status check for statically deployed NIMs
+        location ~ ^/v1/deployment/model-deployments/[^/]+/[^/]+$ {
+          default_type application/json;
+          return 200 '{"status": "ready", "status_details": {"status": "ready"}, "deployment_status": "running", "message": "NIM is pre-deployed and ready"}';
+        }
+
         # Route all model metadata operations to Entity Store
         # This includes model registration (POST), listing (GET), retrieval (GET), updates (PUT), and deletion (DELETE)
         # NO MOCK ENDPOINTS - all model requests go to entity store
