@@ -330,7 +330,6 @@ evaluator-argo:
     workflowDefaults:
       spec:
         imagePullSecrets:
-        - name: ngc-secret
         - name: nvcrimagepullsecret
         podMetadata:
           annotations:

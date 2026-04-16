@@ -15,7 +15,7 @@ maintainers:
 # NeMo Operator is NOT a Helm dependency: NGC chart is at a versioned path. Install separately (required for Customizer):
 #   export VERSION=25.6.0
 #   helm fetch "https://helm.ngc.nvidia.com/nvidia/nemo-microservices/charts/nemo-operator-${VERSION}.tgz" --username='$oauthtoken' --password=$NGC_API_KEY
-#   helm upgrade --install nemo-operator "nemo-operator-${VERSION}.tgz" -n <namespace> --set 'imagePullSecrets[0].name=ngc-secret' --set controllerManager.manager.scheduler=volcano
+#   helm upgrade --install nemo-operator "nemo-operator-${VERSION}.tgz" -n <namespace> --set 'imagePullSecrets[0].name=nvcrimagepullsecret' --set controllerManager.manager.scheduler=volcano
 # If 404: try adding the repo with auth then install from repo: helm repo add nmp https://helm.ngc.nvidia.com/nvidia/nemo-microservices --username='$oauthtoken' --password=$NGC_API_KEY && helm search repo nmp
 dependencies:
   # NIM Operator 3.0.2 from official NVIDIA Helm repo (no auth required for repo add)
