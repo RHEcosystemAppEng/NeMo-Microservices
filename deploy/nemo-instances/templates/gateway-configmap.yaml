@@ -139,9 +139,42 @@ data:
           return 200 '{"status": "ready", "status_details": {"status": "ready"}, "deployment_status": "running", "message": "NIM is pre-deployed and ready"}';
         }
 
-        # Route all model metadata operations to Entity Store
-        # This includes model registration (POST), listing (GET), retrieval (GET), updates (PUT), and deletion (DELETE)
-        # NO MOCK ENDPOINTS - all model requests go to entity store
+        # Mock model metadata endpoint for base model evaluations
+        # Use "meta" namespace to match registered model
+        # api_endpoint structured as object per Pydantic APIEndpointData schema with required model_id field
+        # model_id must match NIM's expected format: "meta/llama-3.2-1b-instruct" (with forward slash)
+        location ~ ^/v1/models/meta/llama-3\.2-1b-instruct$ {
+          default_type application/json;
+          return 200 '{"created_at":"2026-02-03T00:00:00.000000","updated_at":"2026-02-03T00:00:00.000000","name":"llama-3.2-1b-instruct","namespace":"meta","description":"Llama 3.2 1B Instruct","spec":{"num_parameters":1000000000,"context_size":8192,"num_virtual_tokens":0,"is_chat":true},"artifact":{"gpu_arch":"ampere","precision":"fp16","tensor_parallelism":1,"status":"upload_completed","files_url":"hf://meta-llama/Llama-3.2-1B-Instruct"},"base_model":"meta/llama-3.2-1b-instruct","schema_version":"1.0","project":"data-flywheel","custom_fields":{}}';
+        }
+
+        # Mock model metadata endpoint for LLM judge (remote NVIDIA API model)
+        # Even though it's remote, evaluator still checks Entity Store for model metadata
+        location ~ ^/v1/models/meta/llama-3\.3-70b-instruct$ {
+          default_type application/json;
+          return 200 '{"created_at":"2026-02-03T00:00:00.000000","updated_at":"2026-02-03T00:00:00.000000","name":"llama-3.3-70b-instruct","namespace":"meta","description":"Llama 3.3 70B Instruct (Remote)","spec":{"num_parameters":70000000000,"context_size":32768,"num_virtual_tokens":0,"is_chat":true},"artifact":{"gpu_arch":"ampere","precision":"fp16","tensor_parallelism":4,"status":"upload_completed","files_url":"https://integrate.api.nvidia.com"},"base_model":"meta/llama-3.3-70b-instruct","schema_version":"1.0","project":"data-flywheel","custom_fields":{}}';
+        }
+
+        # Route for customized model metadata - proxy to Entity Store
+        location ~ ^/v1/models/[^/]+/customized-.+$ {
+          set $upstream_entitystore {{ .Values.gateway.services.entitystore.name }}.{{ .Values.namespace.name }}.svc.cluster.local:{{ .Values.gateway.services.entitystore.port }};
+          proxy_pass http://$upstream_entitystore;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # List all available models (mock endpoint for Data Flywheel)
+        # Returns OpenAI-compatible models list with all pre-deployed NIMs (LLMs and embedding models)
+        location = /v1/models {
+          default_type application/json;
+          return 200 '{"object":"list","data":[{"id":"meta/llama-3.2-1b-instruct","object":"model","created":1735689600,"owned_by":"meta"},{"id":"meta/llama-3.3-70b-instruct","object":"model","created":1735689600,"owned_by":"meta"},{"id":"nvidia/llama-3.2-nv-embedqa-1b-v2","object":"model","created":1735689600,"owned_by":"nvidia"}]}';
+        }
+
+        # Route all other model metadata operations to Entity Store
+        # This includes model registration (POST), updates (PUT), and deletion (DELETE)
+        # GET requests for models not matched above will also route to entity store
         location ~ ^/v1/models {
           set $upstream_entitystore {{ .Values.gateway.services.entitystore.name }}.{{ .Values.namespace.name }}.svc.cluster.local:{{ .Values.gateway.services.entitystore.port }};
           proxy_pass http://$upstream_entitystore;
