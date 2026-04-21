@@ -37,7 +37,7 @@ datastore-postgresql:
     repository: bitnami/postgresql
     tag: latest
   auth:
-    username: hacohen-flywheel
+    username: ndsuser
     password: CHANGE_ME  # Replace with secure password
     database: ndsdb
   architecture: standalone
@@ -56,7 +56,7 @@ entity-store-postgresql:
     repository: bitnami/postgresql
     tag: latest
   auth:
-    username: hacohen-flywheel
+    username: nesuser
     password: CHANGE_ME  # Replace with secure password
     database: nesdb
   architecture: standalone
@@ -75,7 +75,7 @@ customizer-postgresql:
     repository: bitnami/postgresql
     tag: latest
   auth:
-    username: hacohen-flywheel
+    username: ncsuser
     password: CHANGE_ME  # Replace with secure password
     database: ncsdb
   architecture: standalone
@@ -94,7 +94,7 @@ guardrail-postgresql:
     repository: bitnami/postgresql
     tag: latest
   auth:
-    username: hacohen-flywheel
+    username: guardrailuser
     password: CHANGE_ME  # Replace with secure password
     database: guardraildb
   architecture: standalone
@@ -113,7 +113,7 @@ evaluator-postgresql:
     repository: bitnami/postgresql
     tag: latest
   auth:
-    username: hacohen-flywheel
+    username: evaluser
     password: CHANGE_ME  # Replace with secure password
     database: evaldb
   architecture: standalone
@@ -168,9 +168,9 @@ customizer-mlflow:
     # MINIO_BROWSER=on is applied by post-install hook (templates/minio-console-patch.yaml); chart hardcodes "off" so we patch after deploy.
     extraEnvVars:
       # Dev-only defaults — do NOT use in production; use a secret reference for real deployments.
-      - name: hacohen-flywheel
+      - name: MINIO_ROOT_USER
         value: "CHANGE_ME"
-      - name: hacohen-flywheel
+      - name: MINIO_ROOT_PASSWORD
         value: "CHANGE_ME"
     command:
       - "/usr/bin/docker-entrypoint.sh"
@@ -187,7 +187,7 @@ customizer-mlflow:
       repository: bitnami/postgresql
       tag: latest
     auth:
-      username: hacohen-flywheel
+      username: bn_mlflow
       password: CHANGE_ME  # Replace with secure password
     enableDefaultInitContainers: false
   tracking:
@@ -328,7 +328,7 @@ evaluator-argo:
     workflowDefaults:
       spec:
         imagePullSecrets:
-        - name: hacohen-flywheel
+        - name: nvcrimagepullsecret
         podMetadata:
           annotations:
             openshift.io/required-scc: anyuid
@@ -358,7 +358,7 @@ evaluator-milvus:
         size: 100Gi  # Increased from 50Gi for Milvus vector storage
         storageClass: ""
     extraEnv:
-      - name: hacohen-flywheel
+      - name: LOG_LEVEL
         value: debug
   extraConfigFiles:
     user.yaml: |+
@@ -372,19 +372,19 @@ evaluator-milvus:
         messageQueue: woodpecker  # Use woodpecker (embedded) instead of pulsar
   serviceAccount:
     create: false
-    name: hacohen-flywheel
+    name: milvus
 
 # ===== Argo Service Account (for OpenShift RBAC) =====
 argo:
   serviceAccount:
-    name: hacohen-flywheel
+    name: argo-workflows-executor
     imagePullSecrets:
-      - name: hacohen-flywheel
+      - name: nvcrimagepullsecret
 
 # ===== Milvus Service Account (for OpenShift RBAC) =====
 milvus:
   serviceAccount:
-    name: hacohen-flywheel
+    name: milvus
 
 # ===== Volcano Scheduler Subchart =====
 volcano:
@@ -424,7 +424,7 @@ volcano:
       - key: kubernetes.io/metadata.name
         operator: In
         values:
-          - your-namespace  # Override with: --set volcano.custom.webhooks_namespace_selector_expressions[0].values[0]=YOUR_NAMESPACE
+          - hacohen-flywheel  # Override with: --set volcano.custom.webhooks_namespace_selector_expressions[0].values[0]=YOUR_NAMESPACE
           # Add additional namespaces here if you want this Volcano installation to watch them:
           # - existing-volcano-namespace
           # - another-namespace
