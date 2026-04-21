@@ -194,7 +194,7 @@ install_nemo_infra() {
 
     # Update namespace in values.yaml to match .env
     log_info "Setting namespace to $NAMESPACE in values.yaml..."
-    sed -i.bak "s/name: .*/name: $NAMESPACE/g" values.yaml
+    sed -i.bak "/^namespace:/,/^  name:/ s/^  name: .*/  name: $NAMESPACE/" values.yaml
     rm -f values.yaml.bak
     log_success "Namespace updated in values.yaml"
 
@@ -257,7 +257,7 @@ install_nemo_instances() {
 
     # Update namespace in values.yaml to match .env
     log_info "Setting namespace to $NAMESPACE in values.yaml..."
-    sed -i.bak "s/name: .*/name: $NAMESPACE/g" values.yaml
+    sed -i.bak "/^namespace:/,/^  name:/ s/^  name: .*/  name: $NAMESPACE/" values.yaml
     rm -f values.yaml.bak
     log_success "Namespace updated in values.yaml"
 
