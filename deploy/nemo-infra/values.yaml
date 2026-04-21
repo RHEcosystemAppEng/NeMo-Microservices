@@ -1,8 +1,6 @@
 # NeMo Infrastructure Helm Chart Values (SAMPLE)
-# Copy this file to values.yaml and replace placeholders with your deployment-specific values.
-# values.yaml is gitignored and must not contain sensitive URLs or credentials in the repo.
+# Edit this file to values.yaml and replace placeholders with your deployment-specific values.
 #
-# Replicates the exact Ansible deployment from QUICK-START-OpenShift.md
 
 # Global settings
 global:
@@ -39,7 +37,7 @@ datastore-postgresql:
     repository: bitnami/postgresql
     tag: latest
   auth:
-    username: ndsuser
+    username: hacohen-flywheel
     password: CHANGE_ME  # Replace with secure password
     database: ndsdb
   architecture: standalone
@@ -58,7 +56,7 @@ entity-store-postgresql:
     repository: bitnami/postgresql
     tag: latest
   auth:
-    username: nesuser
+    username: hacohen-flywheel
     password: CHANGE_ME  # Replace with secure password
     database: nesdb
   architecture: standalone
@@ -77,7 +75,7 @@ customizer-postgresql:
     repository: bitnami/postgresql
     tag: latest
   auth:
-    username: ncsuser
+    username: hacohen-flywheel
     password: CHANGE_ME  # Replace with secure password
     database: ncsdb
   architecture: standalone
@@ -96,7 +94,7 @@ guardrail-postgresql:
     repository: bitnami/postgresql
     tag: latest
   auth:
-    username: guardrailuser
+    username: hacohen-flywheel
     password: CHANGE_ME  # Replace with secure password
     database: guardraildb
   architecture: standalone
@@ -115,7 +113,7 @@ evaluator-postgresql:
     repository: bitnami/postgresql
     tag: latest
   auth:
-    username: evaluser
+    username: hacohen-flywheel
     password: CHANGE_ME  # Replace with secure password
     database: evaldb
   architecture: standalone
@@ -170,9 +168,9 @@ customizer-mlflow:
     # MINIO_BROWSER=on is applied by post-install hook (templates/minio-console-patch.yaml); chart hardcodes "off" so we patch after deploy.
     extraEnvVars:
       # Dev-only defaults — do NOT use in production; use a secret reference for real deployments.
-      - name: MINIO_ROOT_USER
+      - name: hacohen-flywheel
         value: "CHANGE_ME"
-      - name: MINIO_ROOT_PASSWORD
+      - name: hacohen-flywheel
         value: "CHANGE_ME"
     command:
       - "/usr/bin/docker-entrypoint.sh"
@@ -189,7 +187,7 @@ customizer-mlflow:
       repository: bitnami/postgresql
       tag: latest
     auth:
-      username: bn_mlflow
+      username: hacohen-flywheel
       password: CHANGE_ME  # Replace with secure password
     enableDefaultInitContainers: false
   tracking:
@@ -330,7 +328,7 @@ evaluator-argo:
     workflowDefaults:
       spec:
         imagePullSecrets:
-        - name: nvcrimagepullsecret
+        - name: hacohen-flywheel
         podMetadata:
           annotations:
             openshift.io/required-scc: anyuid
@@ -360,7 +358,7 @@ evaluator-milvus:
         size: 100Gi  # Increased from 50Gi for Milvus vector storage
         storageClass: ""
     extraEnv:
-      - name: LOG_LEVEL
+      - name: hacohen-flywheel
         value: debug
   extraConfigFiles:
     user.yaml: |+
@@ -374,19 +372,19 @@ evaluator-milvus:
         messageQueue: woodpecker  # Use woodpecker (embedded) instead of pulsar
   serviceAccount:
     create: false
-    name: milvus
+    name: hacohen-flywheel
 
 # ===== Argo Service Account (for OpenShift RBAC) =====
 argo:
   serviceAccount:
-    name: argo-workflows-executor
+    name: hacohen-flywheel
     imagePullSecrets:
-      - name: nvcrimagepullsecret
+      - name: hacohen-flywheel
 
 # ===== Milvus Service Account (for OpenShift RBAC) =====
 milvus:
   serviceAccount:
-    name: milvus
+    name: hacohen-flywheel
 
 # ===== Volcano Scheduler Subchart =====
 volcano:
