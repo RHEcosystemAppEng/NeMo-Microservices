@@ -268,15 +268,14 @@ install_nemo_instances() {
 
     # Install nemo-instances (LlamaStack disabled initially, Gateway enabled)
     # Note: Helm hooks will automatically:
-    #   - Delete and recreate NeMo CRDs (pre-install hook)
+    #   - Validate configuration (pre-install hook)
     #   - Adopt existing cluster resources (pre-install hook)
-    #   - Patch nim-operator RBAC for Gateway API (post-install hook)
     #   - Patch evaluator deployment for EVALUATOR_IMAGE (post-install hook)
     #   - Bind customizer SA to SCC (post-install hook)
     log_info "Installing nemo-instances Helm chart with NeMo Gateway..."
     log_info "Helm pre/post-install hooks will handle:"
-    log_info "  - CRD adoption and resource patching"
-    log_info "  - NIM Operator RBAC patching"
+    log_info "  - Configuration validation"
+    log_info "  - Resource adoption"
     log_info "  - Evaluator init container patching"
     log_info "  - SCC binding for customizer"
     helm install nemo-instances . -n "$NAMESPACE" \
