@@ -12,7 +12,7 @@ global:
 # Installation namespace (replace with your OpenShift project/namespace)
 namespace:
   create: false
-  name: hacohen-flywheel
+  name: your-namespace
 
 # Storage configuration
 pvc:
@@ -426,7 +426,7 @@ volcano:
       - key: kubernetes.io/metadata.name
         operator: In
         values:
-          - hacohen-flywheel  # Override with: --set volcano.custom.webhooks_namespace_selector_expressions[0].values[0]=YOUR_NAMESPACE
+          - your-namespace  # Override with: --set volcano.custom.webhooks_namespace_selector_expressions[0].values[0]=YOUR_NAMESPACE
           # Add additional namespaces here if you want this Volcano installation to watch them:
           # - existing-volcano-namespace
           # - another-namespace

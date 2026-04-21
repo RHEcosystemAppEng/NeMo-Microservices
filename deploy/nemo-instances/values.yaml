@@ -9,7 +9,7 @@
 
 # Installation namespace (replace with your OpenShift project/namespace)
 namespace:
-  name: hacohen-flywheel
+  name: your-namespace
 
 # Component installation flags
 install:
