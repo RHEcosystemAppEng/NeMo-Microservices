@@ -31,21 +31,33 @@ spec:
         - |
           set -e
 
-          echo "=== Deleting Existing NeMo CRDs ==="
-          echo "Note: CRDs will be recreated by Helm to avoid field manager conflicts"
+          echo "=== Adopting Existing NeMo CRDs ==="
+          echo "Note: CRDs will be adopted into Helm to avoid field manager conflicts"
+          echo "WARNING: CRDs are cluster-scoped and shared across all namespaces - NOT deleting them"
 
           NEMO_CRDS=$(oc get crds -o json 2>/dev/null | \
             jq -r '.items[] | select(.spec.group=="apps.nvidia.com") | .metadata.name' 2>/dev/null || echo "")
 
           if [ -z "$NEMO_CRDS" ]; then
-            echo "No existing NeMo CRDs found"
+            echo "No existing NeMo CRDs found (will be created by Helm)"
           else
             for crd in $NEMO_CRDS; do
-              echo "Deleting CRD: $crd"
-              oc delete crd "$crd" 2>/dev/null || echo "  Failed to delete $crd"
-              sleep 2
+              echo "Adopting CRD: $crd"
+
+              # Remove last-applied-configuration annotation to avoid conflicts
+              oc annotate crd "$crd" kubectl.kubernetes.io/last-applied-configuration- 2>/dev/null || true
+
+              # Clear managedFields to remove field manager conflicts
+              oc patch crd "$crd" --type=json -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' 2>/dev/null || true
+
+              # Add Helm annotations and labels for this release
+              oc annotate crd "$crd" \
+                meta.helm.sh/release-name={{ .Release.Name }} \
+                meta.helm.sh/release-namespace={{ .Values.namespace.name }} \
+                --overwrite 2>/dev/null || true
+              oc label crd "$crd" app.kubernetes.io/managed-by=Helm --overwrite 2>/dev/null || true
             done
-            echo "NeMo CRDs deletion complete - Helm will recreate them"
+            echo "✓ NeMo CRDs adoption complete"
           fi
 
           echo ""
