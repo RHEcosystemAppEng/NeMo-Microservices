@@ -192,13 +192,11 @@ install_nemo_infra() {
 
     log_info "Using values.yaml for nemo-infra configuration"
 
-    # Update namespace placeholder in values.yaml if needed
-    if grep -q "your-namespace" values.yaml; then
-        log_info "Updating namespace placeholder to $NAMESPACE..."
-        sed -i.bak "s/your-namespace/$NAMESPACE/g" values.yaml
-        rm -f values.yaml.bak
-        log_success "Namespace updated in values.yaml"
-    fi
+    # Update namespace in values.yaml to match .env
+    log_info "Setting namespace to $NAMESPACE in values.yaml..."
+    sed -i.bak "s/name: .*/name: $NAMESPACE/g" values.yaml
+    rm -f values.yaml.bak
+    log_success "Namespace updated in values.yaml"
 
     # Update Helm dependencies (force rebuild to pick up values changes)
     log_info "Updating Helm dependencies for nemo-infra..."
@@ -257,13 +255,11 @@ install_nemo_instances() {
 
     log_info "Using values.yaml for nemo-instances configuration"
 
-    # Update namespace placeholder in values.yaml if needed
-    if grep -q "your-namespace" values.yaml; then
-        log_info "Updating namespace placeholder to $NAMESPACE..."
-        sed -i.bak "s/your-namespace/$NAMESPACE/g" values.yaml
-        rm -f values.yaml.bak
-        log_success "Namespace updated in values.yaml"
-    fi
+    # Update namespace in values.yaml to match .env
+    log_info "Setting namespace to $NAMESPACE in values.yaml..."
+    sed -i.bak "s/name: .*/name: $NAMESPACE/g" values.yaml
+    rm -f values.yaml.bak
+    log_success "Namespace updated in values.yaml"
 
     # Update Helm dependencies (force rebuild to pick up nim-operator subchart)
     log_info "Updating Helm dependencies for nemo-instances..."
