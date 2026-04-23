@@ -1,0 +1,37 @@
+{{- if .Values.evaluator.enabled }}
+# RBAC for NemoEvaluator service account to manage secrets
+# This grants the evaluator permissions to create and delete secrets for evaluation jobs
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: nemoevaluator-secret-manager
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app.kubernetes.io/name: nemo-instances
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: evaluator
+    app.kubernetes.io/subcomponent: rbac
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "create", "delete", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: nemoevaluator-secret-manager-binding
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app.kubernetes.io/name: nemo-instances
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: evaluator
+    app.kubernetes.io/subcomponent: rbac
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: nemoevaluator-secret-manager
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.evaluator.name }}
+  namespace: {{ .Values.namespace.name }}
+{{- end }}

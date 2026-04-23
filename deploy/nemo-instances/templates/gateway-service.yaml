@@ -1,0 +1,21 @@
+{{- if .Values.gateway.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.gateway.name }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app.kubernetes.io/name: nemo-instances
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: gateway
+    app: {{ .Values.gateway.name }}
+spec:
+  selector:
+    app: {{ .Values.gateway.name }}
+  ports:
+  - protocol: TCP
+    port: {{ .Values.gateway.service.port }}
+    targetPort: {{ .Values.gateway.service.targetPort }}
+    name: http
+  type: {{ .Values.gateway.service.type }}
+{{- end }}

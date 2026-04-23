@@ -91,7 +91,7 @@ oc create secret generic hf-token \
 ```
 
 **For other registries:**
-- **NGC models**: Use existing `ngc-secret` and `ngc-api-secret` (already configured)
+- **NGC models**: Use existing `nvcrimagepullsecret` and `ngc-api` (already configured)
 - **S3 models**: Create secret with AWS credentials
 - **Local/HTTP models**: May not require authentication
 
@@ -157,9 +157,9 @@ spec:
           tag: latest
           pullPolicy: Always
           pullSecrets:
-          - ngc-secret
+          - nvcrimagepullsecret
 
-        authSecret: ngc-api-secret
+        authSecret: ngc-api
 
         storage:
           pvc:

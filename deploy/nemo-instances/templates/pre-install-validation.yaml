@@ -83,18 +83,18 @@ spec:
           
           # Check NGC secrets (REQUIRED)
           echo "📋 Checking NGC Secrets (Required):"
-          check_secret "ngc-secret" "required" "NGC Image Pull Secret"
+          check_secret "nvcrimagepullsecret" "required" "NGC Image Pull Secret"
           if [ $? -eq 0 ]; then
-            # Validate ngc-secret is a docker-registry secret
-            SECRET_TYPE=$(oc get secret ngc-secret -n "$NAMESPACE" -o jsonpath='{.type}' 2>/dev/null || echo "")
+            # Validate nvcrimagepullsecret is a docker-registry secret
+            SECRET_TYPE=$(oc get secret nvcrimagepullsecret -n "$NAMESPACE" -o jsonpath='{.type}' 2>/dev/null || echo "")
             if [ "$SECRET_TYPE" != "kubernetes.io/dockerconfigjson" ] && [ "$SECRET_TYPE" != "kubernetes.io/dockercfg" ]; then
-              echo "    ⚠️  Warning: ngc-secret type is '$SECRET_TYPE', expected docker-registry secret"
+              echo "    ⚠️  Warning: nvcrimagepullsecret type is '$SECRET_TYPE', expected docker-registry secret"
             fi
           fi
-          
-          check_secret "ngc-api-secret" "required" "NGC API Secret"
+
+          check_secret "ngc-api" "required" "NGC API Secret"
           if [ $? -eq 0 ]; then
-            validate_secret_keys "ngc-api-secret" "NGC_API_KEY" "NGC API Secret"
+            validate_secret_keys "ngc-api" "NGC_API_KEY" "NGC API Secret"
           fi
           
           echo ""
@@ -162,15 +162,25 @@ spec:
             echo "Please create the missing secrets before installing:"
             echo ""
             echo "# NGC Image Pull Secret"
-            echo "oc create secret docker-registry ngc-secret \\"
+            echo "oc create secret docker-registry nvcrimagepullsecret \\"
             echo "  --docker-server=nvcr.io \\"
             echo "  --docker-username='\$oauthtoken' \\"
             echo "  --docker-password=\$NGC_API_KEY \\"
             echo "  -n $NAMESPACE"
             echo ""
             echo "# NGC API Secret"
-            echo "oc create secret generic ngc-api-secret \\"
+            echo "oc create secret generic ngc-api \\"
             echo "  --from-literal=NGC_API_KEY=\$NGC_API_KEY \\"
+            echo "  -n $NAMESPACE"
+            echo ""
+            echo "# NVIDIA API Secret"
+            echo "oc create secret generic nvidia-api \\"
+            echo "  --from-literal=NVIDIA_API_KEY=\$NVIDIA_API_KEY \\"
+            echo "  -n $NAMESPACE"
+            echo ""
+            echo "# Hugging Face Token Secret"
+            echo "oc create secret generic hf-secret \\"
+            echo "  --from-literal=HF_TOKEN=\$HF_TOKEN \\"
             echo "  -n $NAMESPACE"
             echo ""
             exit 1

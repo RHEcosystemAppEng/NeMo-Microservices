@@ -267,19 +267,19 @@ Before installing nemo-instances, you must create NGC secrets for pulling NVIDIA
 export NGC_API_KEY="<ngc-api-key>"
 
 # Create NGC Image Pull Secret (for pulling images from nvcr.io)
-oc create secret docker-registry ngc-secret \
+oc create secret docker-registry nvcrimagepullsecret \
   --docker-server=nvcr.io \
   --docker-username='$oauthtoken' \
   --docker-password=$NGC_API_KEY \
   -n $NAMESPACE
 
 # Create NGC API Secret (for model downloads and API access)
-oc create secret generic ngc-api-secret \
+oc create secret generic ngc-api \
   --from-literal=NGC_API_KEY=$NGC_API_KEY \
   -n $NAMESPACE
 
 # Verify secrets were created
-oc get secret ngc-secret ngc-api-secret -n $NAMESPACE
+oc get secret nvcrimagepullsecret ngc-api -n $NAMESPACE
 ```
 
 **Note**: The pre-install validation hook will automatically check for these secrets and fail with a clear error message if they're missing.

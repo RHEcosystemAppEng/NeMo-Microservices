@@ -34,7 +34,7 @@ spec:
     tag: {{ .Values.datastore.image.tag | quote }}
     pullPolicy: {{ .Values.datastore.image.pullPolicy }}
     pullSecrets:
-      - ngc-secret
+      - nvcrimagepullsecret
   replicas: {{ .Values.datastore.replicas }}
   resources:
 {{- toYaml .Values.datastore.resources | nindent 4 }}

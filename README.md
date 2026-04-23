@@ -16,7 +16,7 @@ Helm charts for deploying NVIDIA NeMo microservices infrastructure and demos on 
 
 ## Storage requirements
 
-Plan and allocate persistent storage for the following. Default sizes are from the Helm chart values; adjust in `values.yaml` (or `values.yaml.sample`) as needed.
+Plan and allocate persistent storage for the following. Default sizes are from the Helm chart values; adjust in `values.yaml` as needed.
 
 | Component | Purpose | Default size | Notes |
 |-----------|---------|--------------|--------|
@@ -40,7 +40,7 @@ To use this repo with your own environment, set configuration in a few places in
 
 | What | Where | Set to |
 |------|--------|--------|
-| **Deployment namespace** | `deploy/nemo-infra/values.yaml` and `deploy/nemo-instances/values.yaml` (copy from `values.yaml.sample`) | Your OpenShift project name |
+| **Deployment namespace** | `deploy/nemo-infra/values.yaml` and `deploy/nemo-instances/values.yaml` | Your OpenShift project name |
 | **Service URLs / InferenceService** | Helm `values.yaml` (e.g. `llamastack.inferenceServiceName`), or RHOAI YAML (e.g. `deploy/rhoai/copilot-llama-stack.yaml` `VLLM_URL`) | Your InferenceService name and namespace |
 | **Demos and notebooks** | `env.donotcommit` in each demo (copy from `env.donotcommit.example`) | `NMS_NAMESPACE`, `NIM_CHAT_URL` / `NIM_MODEL_SERVING_URL_EXTERNAL`, tokens as needed |
 
@@ -150,15 +150,25 @@ Before deploying NeMo instances, create the required secrets:
 export NGC_API_KEY="<YOUR_NGC_API_KEY>"
 
 # NGC Image Pull Secret (for pulling images)
-oc create secret docker-registry ngc-secret \
+oc create secret docker-registry nvcrimagepullsecret \
   --docker-server=nvcr.io \
   --docker-username='$oauthtoken' \
   --docker-password=$NGC_API_KEY \
   -n <namespace>
 
 # NGC API Secret (for model downloads)
-oc create secret generic ngc-api-secret \
+oc create secret generic ngc-api \
   --from-literal=NGC_API_KEY=$NGC_API_KEY \
+  -n <namespace>
+
+# NVIDIA API Secret (for NVIDIA API catalog and remote LLM judge)
+oc create secret generic nvidia-api \
+  --from-literal=NVIDIA_API_KEY=$NVIDIA_API_KEY \
+  -n <namespace>
+
+# Hugging Face Token Secret (for HF model/dataset access)
+oc create secret generic hf-secret \
+  --from-literal=HF_TOKEN=$HF_TOKEN \
   -n <namespace>
 ```
 

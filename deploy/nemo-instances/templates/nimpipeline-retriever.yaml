@@ -1,4 +1,4 @@
-{{- if .Values.nimPipelineRetriever.enabled }}
+{{- if .Values.deployRetrieverModel }}
 apiVersion: apps.nvidia.com/v1alpha1
 kind: NIMPipeline
 metadata:

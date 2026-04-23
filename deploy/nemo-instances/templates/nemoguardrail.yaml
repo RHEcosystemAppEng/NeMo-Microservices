@@ -54,7 +54,7 @@ spec:
     tag: {{ .Values.guardrail.image.tag | quote }}
     pullPolicy: {{ .Values.guardrail.image.pullPolicy }}
     pullSecrets:
-      - ngc-secret
+      - nvcrimagepullsecret
   metrics:
     serviceMonitor: {}
   replicas: {{ .Values.guardrail.replicas }}

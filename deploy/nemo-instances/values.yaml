@@ -89,7 +89,7 @@ customizer:
   trainingConfig:
     name: nemo-training-config
   ngcAPISecret:
-    name: ngc-api-secret
+    name: ngc-api
     key: "NGC_API_KEY"
   tolerations:
     - key: "nvidia.com/gpu"
@@ -159,7 +159,7 @@ datastore:
     adminUsername: "datastore_admin"
     adminPassword: "CHANGE_ME"  # Replace with secure password
   # LFS JWT secret (generate with: openssl rand -base64 32 | base64)
-  lfsJwtSecret: "CHANGE_ME_BASE64"  # Replace with your base64-encoded secret
+  lfsJwtSecret: "k2h/OcO9HshQU5sI2XlC4RvcA3DzH4sbsxTfU6/oNz0="  # Base64-encoded random secret
 
 # ===== NemoEntitystore Configuration =====
 # Image: nvcr.io/nvidia/nemo-microservices/entity-store:25.12
@@ -236,7 +236,10 @@ evaluator:
     # Path (e.g., "/v1" for KServe InferenceService)
     path: ""
     # Port for NIM/KServe service (80 for KServe InferenceService, 8000 for NIMPipeline)
-    port: "80"
+    port: "8000"  # Changed from "80" - default for NIMPipeline deployments
+  # Patch job configuration (workaround for NIM Operator v3.0.2 init container env var bug)
+  patchJob:
+    serviceAccount: evaluator-patch-sa
   replicas: 1
 
 # ===== NemoGuardrail Configuration =====
@@ -276,6 +279,12 @@ guardrail:
       cpu: "1"
       ephemeral-storage: 10Gi
 
+# ===== Optional Model Deployments =====
+# Control deployment of embedding and retriever models (disabled by default to save GPU resources)
+# Enable these for RAG (Retrieval-Augmented Generation) demos
+deployEmbeddingModel: false  # Controls nimCacheEmbedding + nimPipelineEmbedding (1 GPU)
+deployRetrieverModel: false  # Controls nimCacheRetriever + nimPipelineRetriever (1 GPU)
+
 # ===== NIMCache Configuration (Chat Model) =====
 # Model: nvcr.io/nim/meta/llama-3.2-1b-instruct:1.8.3 (chat model for inference)
 # Restored for better integration with NeMo Microservices
@@ -288,8 +297,8 @@ nimCache:
   modelPuller: nvcr.io/nim/meta/llama-3.2-1b-instruct:1.8.3
   engine: tensorrt_llm
   tensorParallelism: "1"
-  pullSecret: ngc-secret
-  authSecret: ngc-api-secret
+  pullSecret: nvcrimagepullsecret
+  authSecret: ngc-api
   # OpenShift-compatible UIDs (required for nonroot SCC)
   # Range: 1000790000-1000799999
   userID: 1000790000
@@ -328,8 +337,8 @@ nimPipeline:
     repository: nvcr.io/nim/meta/llama-3.2-1b-instruct
     tag: 1.8.3
     pullPolicy: IfNotPresent
-  pullSecret: ngc-secret
-  authSecret: ngc-api-secret
+  pullSecret: nvcrimagepullsecret
+  authSecret: ngc-api
   nimCacheName: meta-llama3-1b-instruct
   replicas: 1
   resources:
@@ -364,8 +373,8 @@ nimCacheEmbedding:
   modelPuller: nvcr.io/nim/nvidia/llama-3.2-nv-embedqa-1b-v2:1.3.1
   engine: tensorrt  # Embedding models use tensorrt, not tensorrt_llm
   # Note: tensorParallelism is NOT used for embedding models (only for LLM with tensorrt_llm)
-  pullSecret: ngc-secret
-  authSecret: ngc-api-secret
+  pullSecret: nvcrimagepullsecret
+  authSecret: ngc-api
   # OpenShift-compatible UIDs (required for nonroot SCC)
   # Range: 1000790000-1000799999
   userID: 1000790000
@@ -403,8 +412,8 @@ nimPipelineEmbedding:
     repository: nvcr.io/nim/nvidia/llama-3.2-nv-embedqa-1b-v2
     tag: 1.3.1
     pullPolicy: IfNotPresent
-  pullSecret: ngc-secret
-  authSecret: ngc-api-secret
+  pullSecret: nvcrimagepullsecret
+  authSecret: ngc-api
   nimCacheName: nv-embedqa-1b-v2
   replicas: 1
   resources:
@@ -438,8 +447,8 @@ nimCacheRetriever:
   modelPuller: nvcr.io/nim/nvidia/llama-3.2-nv-rerankqa-1b-v2:1.3.1
   engine: tensorrt  # Retriever models use tensorrt, not tensorrt_llm
   # Note: tensorParallelism is NOT used for retriever models (only for LLM with tensorrt_llm)
-  pullSecret: ngc-secret
-  authSecret: ngc-api-secret
+  pullSecret: nvcrimagepullsecret
+  authSecret: ngc-api
   # OpenShift-compatible UIDs (required for nonroot SCC)
   # Range: 1000790000-1000799999
   userID: 1000790000
@@ -477,8 +486,8 @@ nimPipelineRetriever:
     repository: nvcr.io/nim/nvidia/llama-3.2-nv-rerankqa-1b-v2
     tag: 1.3.1
     pullPolicy: IfNotPresent
-  pullSecret: ngc-secret
-  authSecret: ngc-api-secret
+  pullSecret: nvcrimagepullsecret
+  authSecret: ngc-api
   nimCacheName: nv-rerankqa-1b-v2
   replicas: 1
   resources:
@@ -515,9 +524,9 @@ llamastack:
     repository: quay.io/ecosystem-appeng/llamastack-server-distribution
     tag: "latest"
     pullPolicy: Always
-  pullSecret: ngc-secret
+  pullSecret: nvcrimagepullsecret
   ngcAPISecret:
-    name: ngc-api-secret
+    name: ngc-api
     key: "NGC_API_KEY"
   replicas: 1
   port: 8321
@@ -586,26 +595,26 @@ llamastack:
 # NeMo Operator is not a Helm dependency. Install before this chart using VERSION=25.6.0 (per NIM Operator docs):
 #   export NAMESPACE=anemo-rhoai NGC_API_KEY='your-key' VERSION=25.6.0
 #   helm fetch "https://helm.ngc.nvidia.com/nvidia/nemo-microservices/charts/nemo-operator-${VERSION}.tgz" --username='$oauthtoken' --password="$NGC_API_KEY"
-#   helm upgrade --install nemo-operator "nemo-operator-${VERSION}.tgz" -n $NAMESPACE --set 'imagePullSecrets[0].name=ngc-secret' --set controllerManager.manager.scheduler=volcano
+#   helm upgrade --install nemo-operator "nemo-operator-${VERSION}.tgz" -n $NAMESPACE --set 'imagePullSecrets[0].name=nvcrimagepullsecret' --set controllerManager.manager.scheduler=volcano
 # If fetch returns 404, add the repo with auth and install from repo: helm repo add nmp https://helm.ngc.nvidia.com/nvidia/nemo-microservices --username='$oauthtoken' --password="$NGC_API_KEY" && helm repo update && helm search repo nmp
 # The section below is not used by this chart; kept for reference.
 nemo-operator:
   # NeMo Operator chart configuration
   # Following quickstart Step 4 (lines 114-133):
   # - Helm install with resource limits (lines 122-126)
-  # - ServiceAccount configured with ngc-secret from the start (no patching needed)
-  # 
+  # - ServiceAccount configured with nvcrimagepullsecret from the start (no patching needed)
+  #
   # Prerequisites (quickstart lines 43-47):
-  # - ngc-secret must be created manually BEFORE installation:
-  #   oc create secret docker-registry ngc-secret \
+  # - nvcrimagepullsecret must be created manually BEFORE installation:
+  #   oc create secret docker-registry nvcrimagepullsecret \
   #     --docker-server=nvcr.io \
   #     --docker-username='$oauthtoken' \
   #     --docker-password=$NGC_API_KEY \
   #     -n <namespace>
   
-  # Image pull secrets configuration (uses ngc-secret directly, no patching required)
+  # Image pull secrets configuration (uses nvcrimagepullsecret directly, no patching required)
   imagePullSecrets:
-    - name: ngc-secret
+    - name: nvcrimagepullsecret
   
   # Manager resource configuration (exact from quickstart lines 124-125)
   manager:
@@ -627,3 +636,51 @@ nim-operator:
       requests:
         memory: 256Mi
 
+# ===== NeMo Gateway Configuration =====
+# NGINX-based reverse proxy providing unified routing to NeMo Microservices
+# Optional component - disabled by default
+gateway:
+  enabled: false  # Set to true to deploy NeMo Gateway
+  name: nemo-gateway
+  image:
+    repository: nginx
+    tag: "1.25-alpine"
+    pullPolicy: IfNotPresent
+  # Note: Always use 1 replica for gateway (no replication needed)
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+  # NGINX configuration
+  nginx:
+    # OpenShift internal DNS resolver
+    resolver: "172.30.0.10"
+    resolverValid: "30s"
+    # Allow large file uploads for Git LFS and dataset uploads
+    clientMaxBodySize: "100M"
+    # Worker connections
+    workerConnections: 1024
+  # Service routing configuration (defaults use -sample service names)
+  services:
+    customizer:
+      name: nemocustomizer-sample
+      port: 8000
+    datastore:
+      name: nemodatastore-sample
+      port: 8000
+    entitystore:
+      name: nemoentitystore-sample
+      port: 8000
+    evaluator:
+      name: nemoevaluator-sample
+      port: 8000
+    guardrail:
+      name: nemoguardrails-sample
+      port: 8000

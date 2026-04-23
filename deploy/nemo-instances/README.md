@@ -2,8 +2,6 @@
 
 A Helm chart for creating and deploying NVIDIA NeMo microservices instances - example deployments that demonstrate how to use the NeMo infrastructure.
 
-> **Values file**: `values.yaml` is gitignored (it may contain sensitive URLs and credentials). Copy `values.yaml.sample` to `values.yaml` and replace placeholders with your deployment-specific values before installing.
-
 ## Overview
 
 This chart installs the NeMo and NIM operators, then deploys 7 custom resources that represent example NeMo microservices:
@@ -37,7 +35,7 @@ This chart installs the NeMo and NIM operators, then deploys 7 custom resources 
 **✅ Automatic Validation**: The Helm chart includes a pre-install hook that automatically validates all required secrets exist before proceeding with installation.
 
 The validation hook checks:
-- ✅ NGC secrets (`ngc-secret`, `ngc-api-secret`) - **REQUIRED**
+- ✅ NGC secrets (`nvcrimagepullsecret`, `ngc-api`) - **REQUIRED**
 - ✅ Infrastructure PostgreSQL secrets (for auto-creation) - Optional (falls back to defaults)
 - ⚠️ Optional secrets (WandB) - Optional
 
@@ -111,14 +109,14 @@ helm install nemo-instances ./deploy/nemo-instances \
 export NGC_API_KEY="<YOUR_NGC_API_KEY>"
 
 # NGC Image Pull Secret (for pulling images)
-oc create secret docker-registry ngc-secret \
+oc create secret docker-registry nvcrimagepullsecret \
   --docker-server=nvcr.io \
   --docker-username='$oauthtoken' \
   --docker-password=$NGC_API_KEY \
   -n <namespace>
 
 # NGC API Secret (for model downloads)
-oc create secret generic ngc-api-secret \
+oc create secret generic ngc-api \
   --from-literal=NGC_API_KEY=$NGC_API_KEY \
   -n <namespace>
 ```
@@ -162,7 +160,7 @@ oc create secret generic wandb-secret \
 - Repository: `https://helm.ngc.nvidia.com/nvidia-nemo` (requires NGC authentication)
 - Image: `nvcr.io/nvidia/nemo-operator:v25.06`
 - Resource Limits: 512Mi memory limit, 256Mi memory request (exact from quickstart lines 124-125)
-- Post-install Hook: Automatically patches ServiceAccount with `ngc-secret` (matches quickstart line 129)
+- Post-install Hook: Automatically patches ServiceAccount with `nvcrimagepullsecret` (matches quickstart line 129)
 - Pod Restart: Automatically restarts operator pods after patching (matches quickstart line 132)
 - CRDs: Installs NeMo Custom Resource Definitions (nemocustomizers, nemodatastores, etc.)
 
@@ -172,9 +170,9 @@ oc create secret generic wandb-secret \
   helm repo add nvidia-nemo https://helm.ngc.nvidia.com/nvidia-nemo
   helm repo update
   ```
-- **NGC image pull secret (`ngc-secret`) must exist in the namespace BEFORE installation** (quickstart lines 43-47):
+- **NGC image pull secret (`nvcrimagepullsecret`) must exist in the namespace BEFORE installation** (quickstart lines 43-47):
   ```bash
-  oc create secret docker-registry ngc-secret \
+  oc create secret docker-registry nvcrimagepullsecret \
     --docker-server=nvcr.io \
     --docker-username='$oauthtoken' \
     --docker-password=$NGC_API_KEY \
@@ -184,7 +182,7 @@ oc create secret generic wandb-secret \
 
 **Installation Process** (matches quickstart Step 4 exactly):
 1. Helm installs NeMo Operator subchart with resource limits (lines 122-126)
-2. Post-install hook patches ServiceAccount with `ngc-secret` (line 129)
+2. Post-install hook patches ServiceAccount with `nvcrimagepullsecret` (line 129)
 3. Post-install hook restarts operator pods to pick up the secret (line 132)
 
 ### NIM Operator
@@ -208,6 +206,62 @@ oc create secret generic wandb-secret \
 **Installation Process** (matches quickstart Step 5 exactly):
 1. Helm installs NIM Operator subchart with resource limits (lines 141-145)
 2. No post-install steps required (unlike NeMo Operator)
+
+### NeMo Gateway (Optional)
+
+**Purpose**: NGINX-based reverse proxy providing unified routing to NeMo Microservices
+
+**Details**:
+- Image: `nginx:1.25-alpine`
+- Deployment: 1 replica (always 1, not configurable)
+- Service: ClusterIP (port 80)
+- Resource Limits: 128Mi memory request, 256Mi limit, 100m CPU request, 200m limit
+- **Disabled by default** - enable with `--set gateway.enabled=true`
+
+**Features**:
+- Unified API endpoint for all NeMo Microservices
+- Git/LFS proxy for HuggingFace Hub compatibility
+
+**Gateway Routes**:
+- `/v1/datasets` → Entity Store (dataset metadata registration)
+- `/v1/customization` → Customizer (fine-tuning jobs)
+- `/v1/evaluation` → Evaluator (model evaluation jobs)
+- `/v1/guardrails` → Guardrails (safety filters)
+- `/v1/entity-store` → Entity Store (model metadata)
+- `/v1/namespaces` → Entity Store (namespace management)
+- `/v1/datastore` → Datastore (datastore operations)
+- `/v1/hf` → Datastore (HuggingFace API)
+- `/{namespace}/{repo}.git/*` → Datastore (Git/LFS operations)
+- `/v1/models` → Entity Store (model registration POST and listing GET)
+- `/v1/models/{namespace}/{name}` → Entity Store (all model metadata GET/PUT/DELETE)
+
+**Enable Gateway**:
+```bash
+helm install nemo-instances . -n <namespace> \
+  --set namespace.name=<namespace> \
+  --set gateway.enabled=true
+```
+
+**Access Gateway**:
+```bash
+# Port-forward to gateway
+oc port-forward -n <namespace> svc/nemo-gateway 8080:80
+
+# Test health endpoint
+curl http://localhost:8080/healthz
+# Expected: OK
+
+# Test model metadata endpoint (after registering model in entity store)
+curl http://localhost:8080/v1/models
+```
+
+**Integration with Data Flywheel**:
+Data Flywheel applications can use the gateway as a unified endpoint:
+```yaml
+config:
+  nemo_base_url: "http://nemo-gateway"
+  datastore_base_url: "http://nemo-gateway"
+```
 
 ## Installation
 

@@ -1,8 +1,6 @@
 # NeMo Infrastructure Helm Chart Values (SAMPLE)
-# Copy this file to values.yaml and replace placeholders with your deployment-specific values.
-# values.yaml is gitignored and must not contain sensitive URLs or credentials in the repo.
+# Edit this file to values.yaml and replace placeholders with your deployment-specific values.
 #
-# Replicates the exact Ansible deployment from QUICK-START-OpenShift.md
 
 # Global settings
 global:
@@ -330,7 +328,6 @@ evaluator-argo:
     workflowDefaults:
       spec:
         imagePullSecrets:
-        - name: ngc-secret
         - name: nvcrimagepullsecret
         podMetadata:
           annotations:
@@ -427,7 +424,7 @@ volcano:
       - key: kubernetes.io/metadata.name
         operator: In
         values:
-          - your-namespace  # Override with: --set volcano.custom.webhooks_namespace_selector_expressions[0].values[0]=YOUR_NAMESPACE
+          - hacohen-flywheel  # Override with: --set volcano.custom.webhooks_namespace_selector_expressions[0].values[0]=YOUR_NAMESPACE
           # Add additional namespaces here if you want this Volcano installation to watch them:
           # - existing-volcano-namespace
           # - another-namespace
