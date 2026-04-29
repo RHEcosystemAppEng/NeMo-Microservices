@@ -125,6 +125,8 @@ http://llamastack.<namespace>.svc.cluster.local:8321
 
 Use this when running on Red Hat OpenShift AI 3.x with the LlamaStack operator enabled. This deploys the custom NeMo image through the RHOAI operator, getting automatic lifecycle management, health checks, and service creation.
 
+For general LlamaStack operator documentation, see the [official Red Hat OpenShift AI guide](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/2.25/html-single/working_with_llama_stack/index). The steps below extend the standard operator workflow to use a custom NeMo image instead of the default `rh-dev` distribution.
+
 #### Step 1: Verify the LlamaStack operator is active
 
 ```bash
