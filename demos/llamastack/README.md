@@ -73,6 +73,26 @@ pip install "llama-stack-client>=0.3,<0.4"
 
 Do **NOT** use `pip install --upgrade git+https://github.com/meta-llama/llama-stack-client-python.git@main` — that pulls the OGX-rebranded client (0.7.x) which is incompatible.
 
+## RHOAI Default vs Custom NeMo Image
+
+The RHOAI LlamaStack operator ships with a built-in distribution called `rh-dev`. This is **not sufficient** for this demo. Understanding the difference is critical:
+
+| | RHOAI `rh-dev` (default) | Custom NeMo image (required for this demo) |
+|---|---|---|
+| **Image** | `registry.redhat.io/rhoai/odh-llama-stack-core-rhel9` (auto-resolved) | `quay.io/ecosystem-appeng/llamastack-server-distribution:latest` |
+| **Inference** | `remote::vllm` | `remote::nvidia` |
+| **Fine-tuning** | Not available | `remote::nvidia` (NeMo Customizer) |
+| **Datasets** | Not available | `remote::nvidia` (NeMo Datastore / Entity Store) |
+| **Evaluation** | `remote::trustyai_lmeval` (TrustyAI) | `remote::nvidia` (NeMo Evaluator) |
+| **Safety** | `remote::trustyai_fms` (TrustyAI) | `remote::nvidia` (NeMo Guardrails) |
+| **Scoring** | Not available | `inline::basic` |
+| **Agents** | Not available | `inline::meta-reference` |
+| **Use case** | Inference-only with KServe/vLLM | Full E2E workflow with NeMo Microservices |
+
+The `rh-dev` distribution is designed for simple inference scenarios using KServe InferenceServices. It does not include NeMo-specific providers (customizer, datastore, evaluator, guardrails). Since this demo uses LlamaStack as a unified API to **all** NeMo services, the custom image with the `nvidia` distribution is required.
+
+When using the RHOAI operator (Option B below), we use the `distribution.image` field to override the default `rh-dev` image with our custom NeMo image, getting operator lifecycle management with full NeMo functionality.
+
 ## Deployment
 
 There are two deployment methods depending on your environment.
