@@ -69,6 +69,9 @@ spec:
             for crd in $VOLCANO_CRDS; do
               echo "Found Volcano CRD: $crd - adopting into Helm..."
 
+              # Clear managedFields to remove field manager conflicts
+              oc patch crd "$crd" --type=json -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' 2>/dev/null || true
+
               oc annotate crd "$crd" \
                 meta.helm.sh/release-name={{ .Release.Name }} \
                 meta.helm.sh/release-namespace={{ .Values.namespace.name }} \
@@ -90,6 +93,8 @@ spec:
 
           for resource in $CLUSTER_ROLES; do
             echo "Adopting ClusterRole: $resource"
+            oc patch clusterrole "$resource" --type=json \
+              -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' 2>/dev/null || true
             oc annotate clusterrole "$resource" \
               meta.helm.sh/release-name={{ .Release.Name }} \
               meta.helm.sh/release-namespace={{ .Values.namespace.name }} \
@@ -103,6 +108,8 @@ spec:
 
           for resource in $CLUSTER_ROLE_BINDINGS; do
             echo "Adopting ClusterRoleBinding: $resource"
+            oc patch clusterrolebinding "$resource" --type=json \
+              -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' 2>/dev/null || true
             oc annotate clusterrolebinding "$resource" \
               meta.helm.sh/release-name={{ .Release.Name }} \
               meta.helm.sh/release-namespace={{ .Values.namespace.name }} \
@@ -146,6 +153,8 @@ spec:
 
           for resource in $SCCS; do
             echo "Adopting SecurityContextConstraints: $resource"
+            oc patch scc "$resource" --type=json \
+              -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' 2>/dev/null || true
             oc annotate scc "$resource" \
               meta.helm.sh/release-name={{ .Release.Name }} \
               meta.helm.sh/release-namespace={{ .Values.namespace.name }} \
