@@ -44,7 +44,7 @@ spec:
               oc annotate crd "$crd" kubectl.kubernetes.io/last-applied-configuration- 2>/dev/null || true
 
               # Clear managedFields to remove field manager conflicts
-              oc patch crd "$crd" --type=json -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' 2>/dev/null || true
+              oc patch crd "$crd" --type=json -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' || echo "  WARNING: failed to clear managedFields on $crd"
 
               # Add Helm annotations and labels
               oc annotate crd "$crd" \
@@ -70,7 +70,7 @@ spec:
               echo "Found Volcano CRD: $crd - adopting into Helm..."
 
               # Clear managedFields to remove field manager conflicts
-              oc patch crd "$crd" --type=json -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' 2>/dev/null || true
+              oc patch crd "$crd" --type=json -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' || echo "  WARNING: failed to clear managedFields on $crd"
 
               oc annotate crd "$crd" \
                 meta.helm.sh/release-name={{ .Release.Name }} \
@@ -94,7 +94,7 @@ spec:
           for resource in $CLUSTER_ROLES; do
             echo "Adopting ClusterRole: $resource"
             oc patch clusterrole "$resource" --type=json \
-              -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' 2>/dev/null || true
+              -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' || echo "  WARNING: failed to clear managedFields on ClusterRole/$resource"
             oc annotate clusterrole "$resource" \
               meta.helm.sh/release-name={{ .Release.Name }} \
               meta.helm.sh/release-namespace={{ .Values.namespace.name }} \
@@ -109,7 +109,7 @@ spec:
           for resource in $CLUSTER_ROLE_BINDINGS; do
             echo "Adopting ClusterRoleBinding: $resource"
             oc patch clusterrolebinding "$resource" --type=json \
-              -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' 2>/dev/null || true
+              -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' || echo "  WARNING: failed to clear managedFields on ClusterRoleBinding/$resource"
             oc annotate clusterrolebinding "$resource" \
               meta.helm.sh/release-name={{ .Release.Name }} \
               meta.helm.sh/release-namespace={{ .Values.namespace.name }} \
@@ -124,7 +124,7 @@ spec:
           for resource in $WEBHOOKS; do
             echo "Adopting ValidatingWebhookConfiguration: $resource"
             oc patch validatingwebhookconfiguration "$resource" --type=json \
-              -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' 2>/dev/null || true
+              -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' || echo "  WARNING: failed to clear managedFields on ValidatingWebhookConfiguration/$resource"
             oc annotate validatingwebhookconfiguration "$resource" \
               meta.helm.sh/release-name={{ .Release.Name }} \
               meta.helm.sh/release-namespace={{ .Values.namespace.name }} \
@@ -139,7 +139,7 @@ spec:
           for resource in $MUTATING_WEBHOOKS; do
             echo "Adopting MutatingWebhookConfiguration: $resource"
             oc patch mutatingwebhookconfiguration "$resource" --type=json \
-              -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' 2>/dev/null || true
+              -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' || echo "  WARNING: failed to clear managedFields on MutatingWebhookConfiguration/$resource"
             oc annotate mutatingwebhookconfiguration "$resource" \
               meta.helm.sh/release-name={{ .Release.Name }} \
               meta.helm.sh/release-namespace={{ .Values.namespace.name }} \
@@ -154,7 +154,7 @@ spec:
           for resource in $SCCS; do
             echo "Adopting SecurityContextConstraints: $resource"
             oc patch scc "$resource" --type=json \
-              -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' 2>/dev/null || true
+              -p='[{"op": "replace", "path": "/metadata/managedFields", "value": []}]' || echo "  WARNING: failed to clear managedFields on SCC/$resource"
             oc annotate scc "$resource" \
               meta.helm.sh/release-name={{ .Release.Name }} \
               meta.helm.sh/release-namespace={{ .Values.namespace.name }} \
