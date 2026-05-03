@@ -1,6 +1,10 @@
 # (Required) NeMo Microservices URLs — set NMS_NAMESPACE in env or env.donotcommit
 import os
-_NMS_NAMESPACE = os.getenv("NMS_NAMESPACE", "<your_namespace>")
+
+_NMS_NAMESPACE = os.getenv("NMS_NAMESPACE")                                                                                                                           
+if not _NMS_NAMESPACE:                                                                                                                                                
+    raise ValueError("NMS_NAMESPACE environment variable is required. Set it to your OpenShift namespace.")
+
 NDS_URL = f"http://nemodatastore-sample.{_NMS_NAMESPACE}.svc.cluster.local:8000"
 ENTITY_STORE_URL = f"http://nemoentitystore-sample.{_NMS_NAMESPACE}.svc.cluster.local:8000"
 NEMO_URL = f"http://nemocustomizer-sample.{_NMS_NAMESPACE}.svc.cluster.local:8000"
