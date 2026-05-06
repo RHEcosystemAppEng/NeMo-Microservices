@@ -30,7 +30,8 @@ metadata:
 rules:
 - apiGroups: ["security.openshift.io"]
   resources: ["securitycontextconstraints"]
-  verbs: ["get", "list", "use"]
+  resourceNames: ["nemo-customizer-scc"]
+  verbs: ["get", "list", "use", "update", "patch"]
 - apiGroups: [""]
   resources: ["serviceaccounts"]
   verbs: ["get", "list"]

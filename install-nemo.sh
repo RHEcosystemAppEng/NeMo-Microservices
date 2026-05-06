@@ -161,6 +161,53 @@ create_secrets() {
     log_success "All secrets created successfully (compatible with Data Flywheel)"
 }
 
+# Function to clean up cluster-scoped resources left by previous failed installs.
+# Helm SSA (server-side apply) conflicts cannot be resolved by patching managedFields
+# or re-applying — the only reliable approach is to delete the resources and let Helm
+# recreate them. CRDs are handled separately via --skip-crds since they already exist
+# (managed by OpenDataHub or a previous install).
+cleanup_conflicting_resources() {
+    log_info "Cleaning up cluster resources from previous install attempts..."
+
+    # Delete ClusterRoles matching nemo-infra/volcano/nim-operator
+    local CLUSTER_ROLES
+    CLUSTER_ROLES=$(oc get clusterroles -o json 2>/dev/null | \
+        jq -r '.items[] | select(.metadata.name | test("nemo-infra|volcano|nim-operator")) | .metadata.name' 2>/dev/null || echo "")
+    for resource in $CLUSTER_ROLES; do
+        log_info "Deleting ClusterRole: $resource"
+        oc delete clusterrole "$resource" --ignore-not-found 2>/dev/null || true
+    done
+
+    # Delete ClusterRoleBindings
+    local CLUSTER_ROLE_BINDINGS
+    CLUSTER_ROLE_BINDINGS=$(oc get clusterrolebindings -o json 2>/dev/null | \
+        jq -r '.items[] | select(.metadata.name | test("nemo-infra|volcano|nim-operator")) | .metadata.name' 2>/dev/null || echo "")
+    for resource in $CLUSTER_ROLE_BINDINGS; do
+        log_info "Deleting ClusterRoleBinding: $resource"
+        oc delete clusterrolebinding "$resource" --ignore-not-found 2>/dev/null || true
+    done
+
+    # Delete ValidatingWebhookConfigurations
+    local WEBHOOKS
+    WEBHOOKS=$(oc get validatingwebhookconfigurations -o json 2>/dev/null | \
+        jq -r '.items[] | select(.metadata.name | test("nemo-infra|volcano|nim-operator")) | .metadata.name' 2>/dev/null || echo "")
+    for resource in $WEBHOOKS; do
+        log_info "Deleting ValidatingWebhookConfiguration: $resource"
+        oc delete validatingwebhookconfiguration "$resource" --ignore-not-found 2>/dev/null || true
+    done
+
+    # Delete MutatingWebhookConfigurations
+    local MUTATING_WEBHOOKS
+    MUTATING_WEBHOOKS=$(oc get mutatingwebhookconfigurations -o json 2>/dev/null | \
+        jq -r '.items[] | select(.metadata.name | test("nemo-infra|volcano|nim-operator")) | .metadata.name' 2>/dev/null || echo "")
+    for resource in $MUTATING_WEBHOOKS; do
+        log_info "Deleting MutatingWebhookConfiguration: $resource"
+        oc delete mutatingwebhookconfiguration "$resource" --ignore-not-found 2>/dev/null || true
+    done
+
+    log_success "Cleanup complete — Helm will recreate these resources"
+}
+
 # Function to install nemo-infra
 install_nemo_infra() {
     log_info "Installing nemo-infra..."
@@ -203,15 +250,17 @@ install_nemo_infra() {
     rm -rf charts/*.tgz Chart.lock 2>/dev/null || true
     helm dependency update
 
-    # Install nemo-infra
-    # Note: Helm hooks will automatically:
-    #   - Adopt existing Argo/Volcano CRDs (pre-install hook)
-    #   - Adopt existing cluster resources (pre-install hook)
-    #   - Bind SCC to service accounts (post-install hook)
-    log_info "Installing nemo-infra Helm chart..."
-    log_info "Helm pre-install hooks will handle CRD and resource adoption"
+    # Delete cluster-scoped resources left by previous failed installs
+    # so Helm doesn't hit SSA field ownership conflicts
+    cleanup_conflicting_resources
+
+    # Use --skip-crds because Argo/Volcano CRDs already exist on the cluster
+    # (managed by OpenDataHub or previous installs) and Helm SSA cannot
+    # take ownership from other field managers like platform.opendatahub.io
+    log_info "Installing nemo-infra Helm chart (skipping CRDs — they already exist)..."
     helm install nemo-infra . -n "$NAMESPACE" \
         --create-namespace \
+        --skip-crds \
         -f values.yaml
 
     log_success "nemo-infra installed"
@@ -272,12 +321,14 @@ install_nemo_instances() {
     #   - Adopt existing cluster resources (pre-install hook)
     #   - Patch evaluator deployment for EVALUATOR_IMAGE (post-install hook)
     #   - Bind customizer SA to SCC (post-install hook)
+    # Re-annotate SCCs created by nemo-infra so nemo-instances can own them
+    log_info "Transferring SCC ownership from nemo-infra to nemo-instances..."
+    oc annotate scc nemo-customizer-scc \
+        meta.helm.sh/release-name=nemo-instances \
+        meta.helm.sh/release-namespace="$NAMESPACE" \
+        --overwrite 2>/dev/null || true
+
     log_info "Installing nemo-instances Helm chart with NeMo Gateway..."
-    log_info "Helm pre/post-install hooks will handle:"
-    log_info "  - Configuration validation"
-    log_info "  - Resource adoption"
-    log_info "  - Evaluator init container patching"
-    log_info "  - SCC binding for customizer"
     helm install nemo-instances . -n "$NAMESPACE" \
         -f values.yaml \
         --set llamastack.enabled=false \
