@@ -70,10 +70,10 @@ with an SSA ownership conflict unless `--skip-crds` is passed. If the CRDs do no
 Search for resources left behind by previous failed installs:
 
 ```bash
-oc get clusterroles -o json | jq -r '.items[] | select(.metadata.name | test("nemo-infra|volcano|nim-operator")) | .metadata.name'
-oc get clusterrolebindings -o json | jq -r '.items[] | select(.metadata.name | test("nemo-infra|volcano|nim-operator")) | .metadata.name'
-oc get validatingwebhookconfigurations -o json | jq -r '.items[] | select(.metadata.name | test("nemo-infra|volcano|nim-operator")) | .metadata.name'
-oc get mutatingwebhookconfigurations -o json | jq -r '.items[] | select(.metadata.name | test("nemo-infra|volcano|nim-operator")) | .metadata.name'
+oc get clusterroles -o json | jq -r '.items[] | select(.metadata.name | test("nemo-infra|nemo-instances|volcano|nim-operator")) | .metadata.name'
+oc get clusterrolebindings -o json | jq -r '.items[] | select(.metadata.name | test("nemo-infra|nemo-instances|volcano|nim-operator")) | .metadata.name'
+oc get validatingwebhookconfigurations -o json | jq -r '.items[] | select(.metadata.name | test("nemo-infra|nemo-instances|volcano|nim-operator")) | .metadata.name'
+oc get mutatingwebhookconfigurations -o json | jq -r '.items[] | select(.metadata.name | test("nemo-infra|nemo-instances|volcano|nim-operator")) | .metadata.name'
 oc get scc -o json | jq -r '.items[] | select(.metadata.name | test("nemo")) | .metadata.name'
 ```
 
@@ -175,7 +175,11 @@ classes and ask the user which one to use. Do NOT silently change values.yaml.
 1. Create the namespace if it does not exist, or switch to it if it does:
 
 ```bash
-oc get namespace "$NAMESPACE" 2>/dev/null && oc project "$NAMESPACE" || oc new-project "$NAMESPACE"
+if oc get namespace "$NAMESPACE" &>/dev/null; then
+  oc project "$NAMESPACE"
+else
+  oc new-project "$NAMESPACE"
+fi
 ```
 
 2. Recreate the required secrets (delete-then-create to ensure clean state):
