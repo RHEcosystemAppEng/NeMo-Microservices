@@ -99,7 +99,7 @@ Delete all NeMo custom resources. Use `--wait=false` to avoid blocking on finali
 
 ```bash
 for cr in nemotrainingjobs nimservice nimcache nimpipeline nemodatastore nemocustomizer nemoentitystore nemoguardrails nemoevaluator; do
-  oc delete $cr --all -n $NAMESPACE --wait=false 2>/dev/null
+  oc delete $cr --all -n $NAMESPACE --wait=false --ignore-not-found
 done
 ```
 
@@ -110,7 +110,7 @@ If any custom resources are stuck in `Terminating`, remove their finalizers:
 ```bash
 for crd in nemotrainingjobs nimservice nimcache nimpipeline nemodatastore nemocustomizer nemoentitystore nemoguardrails nemoevaluator; do
   for resource in $(oc get $crd -n $NAMESPACE -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
-    oc patch $crd $resource -n $NAMESPACE -p '{"metadata":{"finalizers":null}}' --type=merge 2>/dev/null || true
+    oc patch $crd $resource -n $NAMESPACE -p '{"metadata":{"finalizers":null}}' --type=merge || true
   done
 done
 ```
@@ -140,7 +140,7 @@ Delete PVCs now that pods are gone. Remove finalizers from any that are stuck:
 oc delete pvc --all -n $NAMESPACE --wait=false
 sleep 3
 for pvc in $(oc get pvc -n $NAMESPACE -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
-  oc patch pvc $pvc -n $NAMESPACE -p '{"metadata":{"finalizers":null}}' --type=merge 2>/dev/null || true
+  oc patch pvc $pvc -n $NAMESPACE -p '{"metadata":{"finalizers":null}}' --type=merge || true
 done
 ```
 
@@ -184,10 +184,10 @@ Scan and delete:
 
 ```bash
 echo "=== ClusterRoles ==="
-oc get clusterroles -o json | jq -r '.items[] | select(.metadata.name | test("nemo-infra|volcano|nim-operator")) | .metadata.name'
+oc get clusterroles -o json | jq -r '.items[] | select(.metadata.name | test("nemo-infra|nemo-instances|volcano|nim-operator")) | .metadata.name'
 
 echo "=== ClusterRoleBindings ==="
-oc get clusterrolebindings -o json | jq -r '.items[] | select(.metadata.name | test("nemo-infra|volcano|nim-operator")) | .metadata.name'
+oc get clusterrolebindings -o json | jq -r '.items[] | select(.metadata.name | test("nemo-infra|nemo-instances|volcano|nim-operator")) | .metadata.name'
 ```
 
 Delete each one found (excluding OLM-managed `nim-operator-certified.v*` resources — see above):
@@ -201,10 +201,10 @@ oc delete clusterrolebinding <name> --ignore-not-found
 
 ```bash
 echo "=== ValidatingWebhooks ==="
-oc get validatingwebhookconfigurations -o json | jq -r '.items[] | select(.metadata.name | test("nemo-infra|volcano|nim-operator")) | .metadata.name'
+oc get validatingwebhookconfigurations -o json | jq -r '.items[] | select(.metadata.name | test("nemo-infra|nemo-instances|volcano|nim-operator")) | .metadata.name'
 
 echo "=== MutatingWebhooks ==="
-oc get mutatingwebhookconfigurations -o json | jq -r '.items[] | select(.metadata.name | test("nemo-infra|volcano|nim-operator")) | .metadata.name'
+oc get mutatingwebhookconfigurations -o json | jq -r '.items[] | select(.metadata.name | test("nemo-infra|nemo-instances|volcano|nim-operator")) | .metadata.name'
 ```
 
 Delete each one found:
