@@ -53,6 +53,12 @@ There are no hard-coded namespaces or service URLs in the repo; all are driven b
 
 ## Installation
 
+> **Automated install/uninstall**: AI-assisted runbooks are available in [`docs/commands/`](docs/commands/).
+> These inspect the cluster, detect conflicts (CRD ownership, orphaned resources, SCC collisions),
+> and adapt the installation steps automatically.
+> - [`docs/commands/install-nemo.md`](docs/commands/install-nemo.md) — full install with conflict resolution
+> - [`docs/commands/uninstall-nemo.md`](docs/commands/uninstall-nemo.md) — full uninstall including cluster-scoped orphan cleanup
+
 ### Prerequisites
 
 Before installation, ensure you have:
@@ -317,6 +323,10 @@ oc get rolebinding customizer-scc-nemo-customizer-scc-binding -n <namespace> -o 
 - **UI-created InferenceServices**: Should use `default` ServiceAccount with `nonroot` SCC (automatically configured)
 
 ## Uninstallation
+
+> **Automated uninstall**: See [`docs/commands/uninstall-nemo.md`](docs/commands/uninstall-nemo.md)
+> for an AI-assisted runbook that handles Helm releases, stuck finalizers, and cluster-scoped
+> orphan cleanup (ClusterRoles, ClusterRoleBindings, webhooks, SCCs).
 
 ### ⚠️ Important: Uninstall Order
 
